@@ -10,7 +10,7 @@ A package registry for Go modules, in the spirit of pypi.org.
 - **Discovery:** full-text search with filters (license, Go version, last release, deprecated) and sorting (relevance, downloads, recently updated, newest), download counts and charts, and a home page with just-updated, most-downloaded and new modules. Public pkg.go.dev results follow in their own section.
 - **Public modules:** modules that aren't hosted here come from `proxy.golang.org`, with search and docs from `pkg.go.dev`. Run with `-offline` to turn this off.
 
-Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done).
+Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done).
 
 ## Run it
 
@@ -49,6 +49,7 @@ Open http://localhost:8080 and choose **Register**. Without `-smtp-addr`, emails
 | `-backup-dir` / `-backup-every` / `-backup-keep` | (off) / `24h` / `7` | Automatic database backups |
 | `-trusted-publishing` | `true` | Let GitHub Actions workflows publish with OIDC ID tokens. Off with `-offline`, because it fetches GitHub's signing keys |
 | `-oidc-audience` | module host | Audience GitHub ID tokens must be requested for |
+| `-vulndb` | `https://vuln.go.dev` | Public Go vulnerability database merged into `/vulndb` and used to flag vulnerable dependencies. Empty, or `-offline`, turns it off |
 | `-v` | `false` | Debug logging |
 
 Every flag can also come from the environment as `GOPHERDEX_<FLAG>` (`-base-url` → `GOPHERDEX_BASE_URL`); flags on the command line win. `gopherdexd version` prints the build, and `gopherdexd healthcheck` exits 0 when `/healthz` answers (for container health checks). With an `https` base URL, the server logs a warning for each missing production setting (SMTP, admins, backups, `-trust-proxy`).
@@ -81,6 +82,29 @@ The server checks everything again:
 Re-uploading identical content is a no-op, so CI retries are safe. Different content for an existing version gets `409`.
 
 For CI, prefer **trusted publishing** (next section): nothing secret to store. Or skip `login` and set `GOPHERDEX_REGISTRY` and `GOPHERDEX_TOKEN` from a CI secret.
+
+## Security advisories
+
+Owners publish advisories for their modules from the module's **Security** tab. Like GitHub's security advisories and PyPI's vulnerability notices, each one has:
+- A summary and details.
+- Affected version ranges, meaning the first affected version and the version with the fix (several ranges if needed).
+- Optionally, the affected packages and functions, CVE or GHSA IDs, links and credit.
+
+Each gets an ID like `GDX-2026-0001` and a page at `/advisories/<id>`. After publishing:
+- **Warnings:** affected versions show a warning on their project page and a **Vulnerable** tag in the release history.
+- **Email:** every maintainer is emailed.
+- **Edits:** owners can edit an advisory, for example to add the fixed version once it's out. They can also withdraw one published in error; it stays visible, marked withdrawn, and tools stop reporting it.
+- **Listing and feed:** everything is listed at `/advisories`, with an Atom feed at `/feeds/advisories.atom`.
+
+**govulncheck.** The registry serves the [Go vulnerability database format](https://go.dev/security/vuln/database) at `/vulndb`: its own advisories as OSV entries, merged with Go's public database (refreshed hourly). One command checks hosted and public modules:
+
+```bash
+govulncheck -db https://gopherdex.dev/vulndb ./...
+```
+
+govulncheck reports only vulnerabilities your code can reach. When an advisory names functions, it points to the call. Entries from the public database are redirected to vuln.go.dev.
+
+**Dependencies.** A module's Security tab checks every module version it requires against the registry's advisories and the public database, and lists known vulnerabilities with their fixed versions.
 
 ## Trusted publishing from GitHub Actions
 
@@ -302,6 +326,10 @@ Security notes:
 | `GET /healthz` | `ok`, or `503` when the database is unreachable |
 | `GET /feeds/releases.atom`, `/feeds/new.atom` | Atom feeds of new releases and new modules on the whole registry |
 | `GET /feeds/<owner>.atom`, `/feeds/<owner>/<module>[/vN].atom` | New releases by one user or organization, or of one module. Home, owner and project pages link their feed in `<head>` for feed readers |
+| `GET /advisories`, `GET /advisories/<id>` | Security advisories; owners edit or withdraw on the advisory page |
+| `POST /-/advisories`, `/-/advisories/<id>`, `/-/advisories/<id>/withdraw` | Publish (from the Security tab), edit and withdraw advisories |
+| `GET /vulndb/index/{db,modules,vulns}.json[.gz]`, `GET /vulndb/ID/<id>.json[.gz]` | Go vulnerability database for `govulncheck -db`: the registry's advisories plus the public database |
+| `GET /feeds/advisories.atom` | New and updated advisories |
 | `GET /robots.txt`, `GET /sitemap.xml` | Crawler rules (accounts, forms and the API are off limits) and every project page with its last release date |
 
 Module paths and versions in proxy URLs are case-escaped (`github.com/Azure/x` → `github.com/!azure/x`). Missing modules return 404, so the `go` command moves on to the next proxy in `GOPROXY`.
@@ -333,6 +361,7 @@ internal/cli/         CLI implementation (git tags → module zip → upload)
 internal/registry/    publish validation, immutable versions, serving published modules, import path lookup,
                       roles, yanking, deprecation, organizations, full-text search, download counts
 internal/version/     build version (release tag, go install version, or devel+commit)
+internal/vulndb/      Go vulnerability database format (OSV), version ranges, public database cache and merge
 internal/oidc/        verifies GitHub Actions OIDC ID tokens (RS256, discovery, key rotation) for trusted publishing
 internal/mirror/      warms proxy.golang.org and sum.golang.org after each publish
 internal/license/     SPDX license detection shared by publishing and project pages

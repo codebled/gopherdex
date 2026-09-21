@@ -19,6 +19,7 @@ import (
 //	/feeds/new.atom                 new modules
 //	/feeds/<owner>.atom             releases by a user or organization
 //	/feeds/<owner>/<module>.atom    releases of one module (…/<module>/v2.atom for v2)
+//	/feeds/advisories.atom          security advisories
 const feedSize = 50
 
 // feedLink is advertised in a page's <head> for feed readers.
@@ -73,6 +74,10 @@ func (s *server) handleFeed(w http.ResponseWriter, r *http.Request) {
 	var page string
 	var releases []registry.Release
 	var err error
+	if name == "advisories" {
+		s.writeAdvisoryFeed(w, r, feed)
+		return
+	}
 	switch {
 	case name == "releases":
 		feed.Title, page = "New releases on Gopherdex", "/"
@@ -138,6 +143,47 @@ func (s *server) handleFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	feed.Updated = updated.Format(time.RFC3339)
 
+	w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	fmt.Fprint(w, xml.Header)
+	enc := xml.NewEncoder(w)
+	enc.Indent("", "  ")
+	if err := enc.Encode(feed); err != nil {
+		s.log.Warn("write feed", "path", r.URL.Path, "err", err)
+	}
+}
+
+func (s *server) writeAdvisoryFeed(w http.ResponseWriter, r *http.Request, feed atomFeed) {
+	list, err := s.registry.AllAdvisories(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	feed.Title = "Security advisories on Gopherdex"
+	feed.Links = []atomLink{{Rel: "self", Href: s.siteURL + r.URL.Path}, {Rel: "alternate", Href: s.siteURL + "/advisories"}}
+	updated := time.Unix(0, 0).UTC()
+	for i, a := range list {
+		if i == feedSize {
+			break
+		}
+		if a.ModifiedAt.After(updated) {
+			updated = a.ModifiedAt
+		}
+		title := a.ID + ": " + a.Summary
+		if a.WithdrawnAt != nil {
+			title += " (withdrawn)"
+		}
+		fixed := "No fix yet."
+		if f := a.Fixed(); f != "" {
+			fixed = "Fixed in " + f + "."
+		}
+		feed.Entries = append(feed.Entries, atomEntry{
+			Title: title, ID: s.advisoryURL(a.ID), Updated: a.ModifiedAt.Format(time.RFC3339),
+			Link:    atomLink{Rel: "alternate", Href: s.advisoryURL(a.ID)},
+			Summary: a.ModulePath + ". " + fixed,
+		})
+	}
+	feed.Updated = updated.Format(time.RFC3339)
 	w.Header().Set("Content-Type", "application/atom+xml; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	fmt.Fprint(w, xml.Header)

@@ -27,6 +27,7 @@ import (
 	"github.com/parthiban-sivakumar/gopherdex/internal/ratelimit"
 	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
 	"github.com/parthiban-sivakumar/gopherdex/internal/tokens"
+	"github.com/parthiban-sivakumar/gopherdex/internal/vulndb"
 	"github.com/parthiban-sivakumar/gopherdex/web"
 )
 
@@ -64,6 +65,9 @@ type Config struct {
 	// GitHubOIDC verifies GitHub Actions ID tokens for trusted publishing.
 	// Nil turns trusted publishing off.
 	GitHubOIDC *oidc.Verifier
+	// VulnDB is a copy of the public Go vulnerability database, merged into
+	// /vulndb and used to flag vulnerable dependencies. Nil when offline.
+	VulnDB *vulndb.Upstream
 }
 
 type server struct {
@@ -91,8 +95,9 @@ type server struct {
 	searchLimit *ratelimit.Limiter
 	mintLimit   *ratelimit.Limiter
 
-	admins     map[string]bool
-	githubOIDC *oidc.Verifier
+	admins       map[string]bool
+	githubOIDC   *oidc.Verifier
+	vulnUpstream *vulndb.Upstream
 }
 
 // New returns the application's root handler.
@@ -146,6 +151,7 @@ func New(cfg Config) (http.Handler, error) {
 		mintLimit:     ratelimit.New(60, time.Hour),
 		admins:        map[string]bool{},
 		githubOIDC:    cfg.GitHubOIDC,
+		vulnUpstream:  cfg.VulnDB,
 	}
 	for _, a := range cfg.Admins {
 		s.admins[accounts.NormalizeUsername(a)] = true
@@ -220,6 +226,12 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /robots.txt", s.handleRobots)
 	mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("GET /feeds/{path...}", s.limited(s.handleFeed))
+	mux.HandleFunc("GET /vulndb/{path...}", s.handleVulnDB)
+	mux.HandleFunc("GET /advisories", s.handleAdvisories)
+	mux.HandleFunc("GET /advisories/{id}", s.handleAdvisory)
+	mux.HandleFunc("POST /-/advisories", s.handleCreateAdvisory)
+	mux.HandleFunc("POST /-/advisories/{id}", s.handleUpdateAdvisory)
+	mux.HandleFunc("POST /-/advisories/{id}/withdraw", s.handleWithdrawAdvisory)
 
 	// Browsers send Sec-Fetch-Site/Origin on form posts, so cross-site
 	// POSTs (CSRF) are rejected. API clients such as the CLI send neither

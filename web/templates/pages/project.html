@@ -36,6 +36,14 @@
     <p class="notice danger" role="alert"><strong>{{.Version}} was yanked by its maintainers.</strong> {{with .YankReason}}{{.}} {{end}}Builds that already use it keep working, but new installs skip it. Use <a href="{{.URL}}">{{.Latest}}</a> instead.</p>
     {{end}}
     {{with .Retracted}}<p class="notice danger" role="alert"><strong>{{$.Data.Version}} is retracted by its author.</strong> {{if .Rationale}}{{.Rationale}} {{end}}Use {{$.Data.Latest}} instead.</p>{{end}}
+    {{if .Affecting}}
+    <div class="notice danger vuln-notice" role="alert">
+      <strong>{{.Version}} has {{len .Affecting}} known {{if eq (len .Affecting) 1}}vulnerability{{else}}vulnerabilities{{end}}.</strong>
+      <ul>
+        {{range .Affecting}}<li><a href="/advisories/{{.ID}}">{{.ID}}</a>: {{.Summary}}{{with .Fixed}} Fixed in <strong>{{.}}</strong>.{{else}} No fix yet.{{end}}</li>{{end}}
+      </ul>
+    </div>
+    {{end}}
 
     <div class="project-grid">
       <aside class="project-side">
@@ -44,6 +52,7 @@
           <a href="{{.VersionURL}}?tab=docs"{{if eq .Tab "docs"}} aria-current="page"{{end}}>Documentation <span>{{len .Packages}}</span></a>
           <a href="{{.VersionURL}}?tab=versions"{{if eq .Tab "versions"}} aria-current="page"{{end}}>Release history <span>{{len .Versions}}</span></a>
           <a href="{{.VersionURL}}?tab=files"{{if eq .Tab "files"}} aria-current="page"{{end}}>Download files</a>
+          <a href="{{.VersionURL}}?tab=security"{{if eq .Tab "security"}} aria-current="page"{{end}}>Security{{if .ActiveCount}} <span class="warn-count">{{.ActiveCount}}</span>{{end}}</a>
           {{if .CanManage}}<a class="manage-link" href="{{.URL}}?tab=manage"{{if eq .Tab "manage"}} aria-current="page"{{end}}>Manage <span>{{.Role}}</span></a>{{end}}
         </nav>
 
@@ -180,6 +189,7 @@
                     {{if .Prerelease}}<span class="pill p-pre">Pre-release</span>{{end}}
                     {{if .Retracted}}<span class="pill p-retracted">Retracted</span>{{end}}
                     {{if .Yanked}}<span class="pill p-retracted">Yanked</span>{{end}}
+                    {{if index $.Data.Vulnerable .Version}}<span class="pill p-retracted">Vulnerable</span>{{end}}
                     {{if .RetractRationale}}<p class="rel-note">{{.RetractRationale}}</p>{{end}}
                     {{if .YankReason}}<p class="rel-note">Yanked: {{.YankReason}}</p>{{end}}
                   </td>
@@ -192,6 +202,70 @@
               </tbody>
             </table>
           </div>
+
+        {{else if eq .Tab "security"}}
+          <h2 class="tab-title">Security</h2>
+
+          <section class="manage-block" aria-labelledby="adv-title">
+            <h3 id="adv-title">Advisories for {{.Name}}{{with .Major}}/{{.}}{{end}}</h3>
+            {{if .Advisories}}
+            <ul class="advisory-list">
+              {{range .Advisories}}
+              <li>
+                <div class="adv-head">
+                  <a class="adv-id" href="/advisories/{{.ID}}">{{.ID}}</a>
+                  {{if .WithdrawnAt}}<span class="pill p-version">Withdrawn</span>{{else if .Affects $.Data.Version}}<span class="pill p-retracted">Affects {{$.Data.Version}}</span>{{else}}<span class="pill p-latest">Not in {{$.Data.Version}}</span>{{end}}
+                </div>
+                <p>{{.Summary}}</p>
+                <p class="muted small">Affected: {{range $i, $r := .Ranges}}{{if $i}}; {{end}}{{$r.String}}{{end}} · published {{.PublishedAt.Format "2 Jan 2006"}}</p>
+              </li>
+              {{end}}
+            </ul>
+            {{else}}
+            <p class="muted">No security advisories have been published for this module.</p>
+            {{end}}
+
+            {{if .IsOwner}}
+            <details class="settings-details"{{if .AdvisoryField}} open{{end}}>
+              <summary>Publish a security advisory</summary>
+              <p class="muted small">Advisories go into this registry's vulnerability database at <code>{{.SiteURL}}/vulndb</code>, so <code>govulncheck</code> warns everyone who uses an affected version. Every maintainer is emailed.</p>
+              <form class="stack-form advisory-form" action="/-/advisories" method="post">
+                <input type="hidden" name="module" value="{{.Path}}">
+                {{template "advisoryFields" .AdvisoryForm}}
+                <button class="btn btn-danger-outline" type="submit">Publish advisory</button>
+              </form>
+            </details>
+            {{end}}
+          </section>
+
+          <section class="manage-block" aria-labelledby="deps-title">
+            <h3 id="deps-title">Dependencies of {{.Version}}</h3>
+            {{if .DepVulns}}
+            <p>{{len .DepVulns}} known {{if eq (len .DepVulns) 1}}vulnerability{{else}}vulnerabilities{{end}} in modules that {{.Version}} requires:</p>
+            <ul class="advisory-list">
+              {{range .DepVulns}}
+              <li>
+                <div class="adv-head"><a class="adv-id" href="{{.URL}}" rel="nofollow noopener">{{.ID}}</a> <code>{{.Module}}@{{.Version}}</code></div>
+                <p>{{.Summary}}{{with .Fixed}} Fixed in {{.}}.{{else}} No fix yet.{{end}}</p>
+              </li>
+              {{end}}
+            </ul>
+            <p class="muted small">A listed vulnerability matters only if your program uses the affected code. <code>govulncheck</code> checks that.</p>
+            {{else if not .Requires}}
+            <p class="muted">{{.Version}} has no dependencies.</p>
+            {{else if .VulnDBOn}}
+            <p class="muted">None of its {{len .Requires}} required module versions has a known vulnerability in the Go vulnerability database or on this registry.</p>
+            {{else}}
+            <p class="muted">Checked against this registry's advisories only; the public Go vulnerability database is turned off on this server.</p>
+            {{end}}
+            {{with .DepVulnsError}}<p class="notice" role="status">{{.}}</p>{{end}}
+          </section>
+
+          <section class="manage-block" aria-labelledby="scan-title">
+            <h3 id="scan-title">Scan your own code</h3>
+            <p class="muted">This registry serves a vulnerability database that includes its own advisories{{if .VulnDBOn}} and everything in Go's public database{{end}}:</p>
+            <div class="cmd"><code>govulncheck -db {{.SiteURL}}/vulndb ./...</code><button type="button" data-copy="govulncheck -db {{.SiteURL}}/vulndb ./...">Copy</button></div>
+          </section>
 
         {{else if eq .Tab "manage"}}
           <h2 class="tab-title">Manage {{.Name}}{{with .Major}}/{{.}}{{end}}</h2>

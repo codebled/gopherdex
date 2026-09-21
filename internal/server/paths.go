@@ -110,7 +110,7 @@ func pkgID(modPath, importPath string) string {
 	return "pkg-" + strings.ReplaceAll(rel, "/", "-")
 }
 
-var projectTabs = map[string]bool{"": true, "docs": true, "versions": true, "files": true, "manage": true}
+var projectTabs = map[string]bool{"": true, "docs": true, "versions": true, "files": true, "security": true, "manage": true}
 
 type projectData struct {
 	*project.Page
@@ -130,6 +130,16 @@ type projectData struct {
 	Publishers        []registry.Publisher // for owners, on the manage tab
 	TrustedPublishing bool
 	SiteURL           string
+
+	Advisories    []*registry.Advisory // every advisory of the module, withdrawn too
+	Affecting     []*registry.Advisory // active ones that affect the viewed version
+	Vulnerable    map[string]bool      // versions affected by an active advisory
+	ActiveCount   int
+	DepVulns      []depVuln // security tab: vulnerable dependencies of the viewed version
+	DepVulnsError string
+	VulnDBOn      bool
+	AdvisoryForm  advisoryForm
+	AdvisoryField string
 }
 
 func (s *server) handleProject(w http.ResponseWriter, r *http.Request, modPath, version string) {
@@ -139,6 +149,16 @@ func (s *server) handleProject(w http.ResponseWriter, r *http.Request, modPath, 
 // renderProject shows a project page tab. The manage tab only exists for the
 // module's owners and maintainers.
 func (s *server) renderProject(w http.ResponseWriter, r *http.Request, modPath, version, tab string, status int, errMsg string) {
+	s.renderProjectFull(w, r, modPath, version, tab, status, errMsg, nil)
+}
+
+// renderProjectWith renders the latest version's tab after adjusting the
+// page data, e.g. to keep what was typed into a form.
+func (s *server) renderProjectWith(w http.ResponseWriter, r *http.Request, modPath, tab string, status int, errMsg string, adjust func(*projectData)) {
+	s.renderProjectFull(w, r, modPath, "", tab, status, errMsg, adjust)
+}
+
+func (s *server) renderProjectFull(w http.ResponseWriter, r *http.Request, modPath, version, tab string, status int, errMsg string, adjust func(*projectData)) {
 	if !projectTabs[tab] {
 		tab = ""
 	}
@@ -181,6 +201,38 @@ func (s *server) renderProject(w http.ResponseWriter, r *http.Request, modPath, 
 		}
 	}
 	data.TrustedPublishing, data.SiteURL = s.githubOIDC != nil, s.siteURL
+	if data.Advisories, err = s.registry.ModuleAdvisories(r.Context(), modPath); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data.Vulnerable = map[string]bool{}
+	for _, a := range data.Advisories {
+		if a.WithdrawnAt == nil {
+			data.ActiveCount++
+		}
+		if a.Affects(p.Version) {
+			data.Affecting = append(data.Affecting, a)
+		}
+		for _, v := range p.Versions {
+			if a.Affects(v.Version) {
+				data.Vulnerable[v.Version] = true
+			}
+		}
+	}
+	data.VulnDBOn = s.vulnUpstream != nil
+	if tab == "security" {
+		reqs := make([]struct{ Path, Version string }, len(p.Requires))
+		for i, req := range p.Requires {
+			reqs[i].Path, reqs[i].Version = req.Path, req.Version
+		}
+		if data.DepVulns, err = s.dependencyVulns(r.Context(), reqs); err != nil {
+			s.log.Warn("check dependency vulnerabilities", "module", modPath, "err", err)
+			data.DepVulnsError = "The public vulnerability database didn't answer in time, so this list may be incomplete. Reload to try again."
+		}
+	}
+	if adjust != nil {
+		adjust(&data)
+	}
 	if !p.IsLatest {
 		data.VersionURL = s.project.URL(modPath, p.Version)
 	}

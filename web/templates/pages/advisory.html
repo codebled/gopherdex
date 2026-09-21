@@ -1,0 +1,76 @@
+{{define "content"}}{{with .Data}}
+<section class="account">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker"><a href="/advisories">Security advisory</a></p>
+        <h1>{{.A.ID}}</h1>
+        <p class="advisory-summary">{{.A.Summary}}</p>
+        <p class="muted">Published {{.A.PublishedAt.Format "2 January 2006"}}{{if .A.ModifiedAt.After .A.PublishedAt}}, updated {{.A.ModifiedAt.Format "2 January 2006"}}{{end}}{{with .A.CreatedBy}} by @{{.}}{{end}}</p>
+      </div>
+      <div class="namespace-card">
+        <span class="muted">Module</span>
+        <a href="{{.ModuleURL}}"><code>{{.A.ModulePath}}</code></a>
+        <a class="security-link" href="{{.OSVURL}}">OSV JSON</a>
+      </div>
+    </div>
+
+    {{with .Notice}}<p class="notice success" role="status">{{.}}</p>{{end}}
+    {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+    {{with .A.WithdrawnAt}}<p class="notice" role="status"><strong>Withdrawn on {{.Format "2 January 2006"}}.</strong> The owners say this advisory was published in error. Tools no longer report it.</p>{{end}}
+
+    <div class="advisory-grid">
+      <section class="panel" aria-labelledby="details-title">
+        <div class="panel-head"><h2 id="details-title">Details</h2></div>
+        <div class="panel-body advisory-details">
+          <p class="pre-line">{{.A.Details}}</p>
+          {{with .A.References}}
+          <h3>Links</h3>
+          <ul>{{range .}}<li><a href="{{.}}" rel="nofollow ugc noopener">{{.}}</a></li>{{end}}</ul>
+          {{end}}
+          {{with .A.Credits}}<p class="muted">Credit: {{.}}</p>{{end}}
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="affected-title">
+        <div class="panel-head"><h2 id="affected-title">Affected</h2></div>
+        <div class="panel-body">
+          <dl class="adv-facts">
+            <dt>Versions</dt>
+            <dd>{{range .A.Ranges}}<span class="range">{{.String}}</span>{{end}}</dd>
+            <dt>Fixed in</dt>
+            <dd>{{with .A.Fixed}}<strong>{{.}}</strong>{{else}}No fix yet{{end}}</dd>
+            {{if .A.Packages}}
+            <dt>Packages</dt>
+            <dd>{{range .A.Packages}}<span class="range"><code>{{.Path}}</code>{{with .Symbols}}: {{join . ", "}}{{end}}</span>{{end}}</dd>
+            {{end}}
+            {{with .A.Aliases}}<dt>Also known as</dt><dd>{{join . ", "}}</dd>{{end}}
+          </dl>
+          {{with .A.Fixed}}
+          <p>Upgrade:</p>
+          <div class="cmd"><code>go get {{$.Data.A.ModulePath}}@{{.}}</code><button type="button" data-copy="go get {{$.Data.A.ModulePath}}@{{.}}">Copy</button></div>
+          {{end}}
+        </div>
+      </section>
+
+      {{if .CanEdit}}
+      <section class="panel advisory-edit" aria-labelledby="edit-title">
+        <div class="panel-head"><h2 id="edit-title">Edit</h2><p>You own {{.A.ModulePath}}</p></div>
+        <div class="panel-body">
+          <form class="stack-form advisory-form" action="/-/advisories/{{.A.ID}}" method="post">
+            {{template "advisoryFields" .Form}}
+            <button class="btn btn-primary" type="submit">Save changes</button>
+          </form>
+          {{if not .A.WithdrawnAt}}
+          <form action="/-/advisories/{{.A.ID}}/withdraw" method="post" class="withdraw-form">
+            <p class="muted small">Published this by mistake? Withdrawing keeps the page and ID, marked withdrawn, and tools stop reporting it.</p>
+            <button class="btn btn-danger-outline btn-sm" type="submit">Withdraw advisory</button>
+          </form>
+          {{end}}
+        </div>
+      </section>
+      {{end}}
+    </div>
+  </div>
+</section>
+{{end}}{{end}}

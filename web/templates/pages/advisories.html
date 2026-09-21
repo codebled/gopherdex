@@ -1,0 +1,39 @@
+{{define "content"}}{{with .Data}}
+<section class="account">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker">Security</p>
+        <h1>Security advisories</h1>
+        <p class="muted">Vulnerabilities that module owners have disclosed for modules hosted here. <a href="/feeds/advisories.atom">Feed (Atom)</a></p>
+      </div>
+    </div>
+
+    <section class="panel" aria-labelledby="scan-title">
+      <div class="panel-head"><h2 id="scan-title">Check your code</h2><p>With the Go team's <a href="https://go.dev/doc/tutorial/govulncheck">govulncheck</a></p></div>
+      <div class="panel-body">
+        <p>This registry serves a Go vulnerability database with these advisories and everything in Go's public database. govulncheck reports only vulnerabilities your code can actually reach.</p>
+        <div class="cmd"><code>govulncheck -db {{.SiteURL}}/vulndb ./...</code><button type="button" data-copy="govulncheck -db {{.SiteURL}}/vulndb ./...">Copy</button></div>
+      </div>
+    </section>
+
+    {{if .Advisories}}
+    <ul class="advisory-list advisory-page-list">
+      {{range .Advisories}}
+      <li>
+        <div class="adv-head">
+          <a class="adv-id" href="/advisories/{{.ID}}">{{.ID}}</a>
+          <a href="{{projectURL $.ModuleHost .ModulePath}}"><code>{{.ModulePath}}</code></a>
+          {{if .WithdrawnAt}}<span class="pill p-version">Withdrawn</span>{{else if .Fixed}}<span class="pill p-latest">Fixed in {{.Fixed}}</span>{{else}}<span class="pill p-retracted">No fix yet</span>{{end}}
+        </div>
+        <p>{{.Summary}}</p>
+        <p class="muted small">Published {{.PublishedAt.Format "2 Jan 2006"}}{{range .Aliases}} · {{.}}{{end}}</p>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="empty">No advisories yet. Owners publish them from their module's Security tab.</p>
+    {{end}}
+  </div>
+</section>
+{{end}}{{end}}

@@ -50,6 +50,7 @@
     <nav aria-label="Footer">
       <a href="/search">Browse modules</a>
       <a href="/#publish">Publish</a>
+      <a href="/advisories">Security advisories</a>
       <a href="/healthz">Status</a>
     </nav>
   </div>
@@ -92,4 +93,42 @@ jobs:
           go-version: stable
       - run: {{cliInstall}}
       - run: gopherdex publish --registry {{.SiteURL}}
+{{- end}}
+
+{{define "advisoryFields" -}}
+<div class="field">
+  <label for="adv-summary">Summary</label>
+  <input id="adv-summary" name="summary" type="text" required maxlength="160" value="{{.Summary}}" placeholder="Path traversal in retry.Do">
+</div>
+<div class="field">
+  <label for="adv-details">Details</label>
+  <textarea id="adv-details" name="details" rows="6" required maxlength="10000" placeholder="What goes wrong, who is affected, and how to fix or work around it.">{{.Details}}</textarea>
+</div>
+<fieldset class="range-fields">
+  <legend>Affected versions</legend>
+  <p class="field-help">Each row is a range: from the first affected version up to the version with the fix. Leave "First affected" empty for "every earlier version", and "Fixed in" empty if there's no fix yet. All rows empty means every version, no fix.</p>
+  {{range $i, $intro := .Introduced}}
+  <div class="range-row">
+    <label>First affected <input name="introduced_{{$i}}" type="text" maxlength="100" value="{{$intro}}" placeholder="v1.1.0" autocapitalize="none" spellcheck="false"></label>
+    <label>Fixed in <input name="fixed_{{$i}}" type="text" maxlength="100" value="{{index $.Fixed $i}}" placeholder="v1.2.0" autocapitalize="none" spellcheck="false"></label>
+  </div>
+  {{end}}
+</fieldset>
+<div class="field">
+  <label for="adv-packages">Affected packages and functions <span class="muted">(optional)</span></label>
+  <textarea id="adv-packages" name="packages" rows="3" placeholder=". : Do, Policy.Next&#10;internal/backoff" autocapitalize="none" spellcheck="false">{{.Packages}}</textarea>
+  <p class="field-help">One package per line, relative to the module (<code>.</code> is its root), optionally followed by <code>: Func, Type.Method</code>. With functions listed, govulncheck only warns programs that call them.</p>
+</div>
+<div class="field">
+  <label for="adv-aliases">CVE or GitHub advisory IDs <span class="muted">(optional)</span></label>
+  <input id="adv-aliases" name="aliases" type="text" maxlength="400" value="{{.Aliases}}" placeholder="CVE-2026-12345, GHSA-2c4m-59x9-fr2g" autocapitalize="none" spellcheck="false">
+</div>
+<div class="field">
+  <label for="adv-refs">Links <span class="muted">(optional)</span></label>
+  <textarea id="adv-refs" name="references" rows="2" placeholder="https://github.com/you/module/issues/12" autocapitalize="none" spellcheck="false">{{.References}}</textarea>
+</div>
+<div class="field">
+  <label for="adv-credits">Credit <span class="muted">(optional)</span></label>
+  <input id="adv-credits" name="credits" type="text" maxlength="200" value="{{.Credits}}" placeholder="Who found it">
+</div>
 {{- end}}

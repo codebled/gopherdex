@@ -32,6 +32,7 @@ import (
 	"github.com/parthiban-sivakumar/gopherdex/internal/server"
 	"github.com/parthiban-sivakumar/gopherdex/internal/store"
 	"github.com/parthiban-sivakumar/gopherdex/internal/version"
+	"github.com/parthiban-sivakumar/gopherdex/internal/vulndb"
 )
 
 func main() {
@@ -120,6 +121,7 @@ func run() error {
 	backupKeep := flag.Int("backup-keep", 7, "automatic backups to keep")
 	trusted := flag.Bool("trusted-publishing", true, "let GitHub Actions workflows publish with OIDC ID tokens instead of API tokens (off with -offline)")
 	oidcAudience := flag.String("oidc-audience", "", "audience GitHub ID tokens must be requested for (default: the module host)")
+	vulnDB := flag.String("vulndb", vulndb.DefaultUpstream, "public Go vulnerability database merged into /vulndb and used to flag vulnerable dependencies; empty turns it off (off with -offline)")
 	verbose := flag.Bool("v", false, "log debug messages")
 	flag.Parse()
 	if err := flagsFromEnv(flag.CommandLine, os.Getenv); err != nil {
@@ -231,6 +233,12 @@ func run() error {
 		githubOIDC = &oidc.Verifier{Issuer: oidc.GitHubIssuer, Audience: aud}
 	}
 
+	var vulnUpstream *vulndb.Upstream
+	if *vulnDB != "" && !*offline {
+		vulnUpstream = &vulndb.Upstream{URL: *vulnDB, Log: log}
+		go vulnUpstream.Run(ctx, time.Hour)
+	}
+
 	handler, err := server.New(server.Config{
 		Discovery:     disc,
 		Accounts:      accts,
@@ -244,6 +252,7 @@ func run() error {
 		Mirror:        mirrorOrNil(notifier),
 		Admins:        splitList(*admins),
 		GitHubOIDC:    githubOIDC,
+		VulnDB:        vulnUpstream,
 	})
 	if err != nil {
 		return err

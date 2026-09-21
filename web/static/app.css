@@ -171,7 +171,7 @@ main > section.library { padding-block: 40px 72px; }
 .panel-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 16px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
 .panel-head h3 { margin: 0; font: 800 20px var(--font-display); letter-spacing: -0.02em; }
 .panel-head p { margin: 0; font-size: 14px; color: var(--text-muted); }
-.panel-body { padding: 20px; display: grid; gap: 14px; justify-items: start; }
+.panel-body { padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; justify-items: start; }
 .panel-body p { margin: 0; }
 
 .timeline { list-style: none; margin: 0; padding: 8px 0; }
@@ -571,3 +571,34 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .danger-panel .stack-form { max-width: 560px; }
 .orgs-panel .org-form { grid-template-columns: minmax(0, 1fr); justify-items: start; }
 .orgs-panel .org-form .field { width: 100%; }
+
+/* Security advisories */
+.warn-count { background: var(--danger); color: var(--on-danger); border-radius: 999px; padding: 0 7px; font-size: 12px; font-weight: 700; }
+.vuln-notice ul { margin: 6px 0 0; padding-left: 20px; }
+.vuln-notice li { margin: 2px 0; }
+.advisory-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; width: 100%; }
+.advisory-list li { padding: 12px 16px; border-top: 1px solid var(--line); display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.advisory-list li:first-child { border-top: 0; }
+.advisory-list p { margin: 0; }
+.adv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.adv-id { font: 600 14px var(--font-mono); }
+.advisory-page-list { margin-top: 24px; background: var(--surface); }
+.advisory-summary { font-size: 20px; margin: 8px 0; max-width: 60ch; }
+.advisory-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 860px) { .advisory-grid { grid-template-columns: minmax(0, 1fr); } }
+.advisory-grid .advisory-edit { grid-column: 1 / -1; }
+.advisory-details h3 { font-size: 16px; margin: 8px 0 0; }
+.advisory-details ul { margin: 0; padding-left: 20px; overflow-wrap: anywhere; }
+.pre-line { white-space: pre-line; overflow-wrap: anywhere; }
+.adv-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; margin: 0; width: 100%; }
+.adv-facts dt { color: var(--text-muted); }
+.adv-facts dd { margin: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.advisory-form { max-width: 720px; }
+.advisory-form textarea { width: 100%; font: 400 15px var(--font-body); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; resize: vertical; }
+.advisory-form textarea:focus { outline: 3px solid var(--primary); border-color: var(--focus); }
+.range-fields { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; width: 100%; min-width: 0; }
+.range-fields legend { font-weight: 600; margin-bottom: 4px; }
+.range-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.range-row label { display: grid; gap: 4px; font-size: 14px; color: var(--text-muted); }
+.range-row input { font: 500 15px var(--font-mono); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.withdraw-form { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 8px; justify-items: start; width: 100%; }

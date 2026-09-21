@@ -36,10 +36,24 @@ const (
 	fontSize = 11
 )
 
-// SVG renders the badge. Text is measured with approximate Verdana
-// widths, which is what shields.io and most READMEs expect.
+// logoWidth is the space the Gopherdex box takes at the left of the label.
+const logoWidth = 17
+
+// logo is the Gopherdex box, scaled from its 32-unit drawing to 14px.
+func logo() string {
+	return fmt.Sprintf(`<g transform="translate(5 3) scale(0.4375)">`+
+		`<path d="M16 2.5 28.5 9.5 16 16.5 3.5 9.5Z" fill="%s"/>`+
+		`<path d="M3.5 9.5 16 16.5V30L3.5 23Z" fill="%s"/>`+
+		`<path d="M28.5 9.5 16 16.5V30L28.5 23Z" fill="%s"/>`+
+		`<path d="M9.75 6 22.25 13" stroke="%s" stroke-width="2" stroke-linecap="round"/></g>`,
+		hex("light-blue"), hex("gopher-blue"), hex("dark-blue"), hex("white"))
+}
+
+// SVG renders the badge, with the Gopherdex box before the label. Text is
+// measured with approximate Verdana widths, which is what shields.io and
+// most READMEs expect.
 func (b Badge) SVG() []byte {
-	lw := textWidth(b.Label) + 2*padding
+	lw := textWidth(b.Label) + 2*padding + logoWidth
 	vw := textWidth(b.Value) + 2*padding
 	w := lw + vw
 	title := html.EscapeString(b.Label + ": " + b.Value)
@@ -50,9 +64,11 @@ func (b Badge) SVG() []byte {
 	fmt.Fprintf(&sb, `<rect width="%d" height="%d" fill="%s"/>`, lw, height, hex(Neutral.BG))
 	fmt.Fprintf(&sb, `<rect x="%d" width="%d" height="%d" fill="%s"/></g>`, lw, vw, height, hex(b.Style.BG))
 	fmt.Fprintf(&sb, `<g font-family="Verdana,DejaVu Sans,Geneva,sans-serif" font-size="%d" text-anchor="middle">`, fontSize)
-	fmt.Fprintf(&sb, `<text x="%d" y="14" fill="%s">%s</text>`, lw/2, hex(Neutral.FG), html.EscapeString(b.Label))
+	fmt.Fprintf(&sb, `<text x="%d" y="14" fill="%s">%s</text>`, logoWidth+(lw-logoWidth)/2, hex(Neutral.FG), html.EscapeString(b.Label))
 	fmt.Fprintf(&sb, `<text x="%d" y="14" fill="%s">%s</text>`, lw+vw/2, hex(b.Style.FG), html.EscapeString(b.Value))
-	sb.WriteString(`</g></svg>`)
+	sb.WriteString(`</g>`)
+	sb.WriteString(logo())
+	sb.WriteString(`</svg>`)
 	return []byte(sb.String())
 }
 

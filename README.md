@@ -1,4 +1,9 @@
-# Gopherdex
+<p align="center"><img src="web/static/favicon.svg" width="72" height="72" alt=""></p>
+
+<h1 align="center">gopherdex</h1>
+
+<p align="center">The Go module registry: publish, discover and install Go modules.</p>
+
 
 A package registry for Go modules, in the spirit of pypi.org.
 
@@ -10,7 +15,7 @@ A package registry for Go modules, in the spirit of pypi.org.
 - **Discovery:** full-text search with filters (license, Go version, last release, deprecated) and sorting (relevance, downloads, recently updated, newest), download counts and charts, and a home page with just-updated, most-downloaded and new modules. Public pkg.go.dev results follow in their own section.
 - **Public modules:** modules that aren't hosted here come from `proxy.golang.org`, with search and docs from `pkg.go.dev`. Run with `-offline` to turn this off.
 
-Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done) → documentation and dependency graph (done) → badges and public JSON API (done) → publish-time safety checks (done).
+Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done) → documentation and dependency graph (done) → badges and public JSON API (done) → publish-time safety checks (done) → unified search (done).
 
 ## Run it
 
@@ -84,6 +89,17 @@ The server checks everything again:
 Re-uploading identical content is a no-op, so CI retries are safe. Different content for an existing version gets `409`.
 
 For CI, prefer **trusted publishing** (next section): nothing secret to store. Or skip `login` and set `GOPHERDEX_REGISTRY` and `GOPHERDEX_TOKEN` from a CI secret.
+
+## Unified search
+
+`/search?q=` ranks modules hosted here and public Go modules (from pkg.go.dev) in one list, labeled by source:
+
+- **Relevance:** how well the module's name, path and summary match the words, weighted toward the name (exact, then prefix, then substring). `go retry` also matches `go-retry`.
+- **Popularity:** for hosted modules, downloads and "used by"; for public ones, pkg.go.dev's own order, which reflects how many packages import them.
+- **Quality:** verified builds (trusted publishing) get a small boost; deprecated modules and ones with an active advisory sink.
+- **Duplicates:** a hosted module that pkg.go.dev also knows appears once, as the hosted result.
+
+**On Gopherdex** (`&scope=hosted`) searches only this registry, with license, Go version and release-date filters, sorting and pages. Using any of those switches to it automatically, with a note. Public results are cached for 10 minutes. If pkg.go.dev takes more than 1.5 s, the page shows hosted results and says so. It all renders on the server, with no JavaScript needed. The `/api/v1/search` endpoint stays hosted-only.
 
 ## Documentation, source and dependencies
 

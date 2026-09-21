@@ -29,6 +29,7 @@ type page struct {
 	ModuleHost string
 	ZeroConfig bool
 	Feed       *feedLink // advertised to feed readers
+	SiteURL    string
 }
 
 // feedOf returns the feed a page's data offers, if any.
@@ -44,6 +45,7 @@ func feedOf(data any) *feedLink {
 func parsePages() (map[string]*template.Template, error) {
 	funcs := template.FuncMap{
 		"cliInstall": func() string { return version.CLIInstall },
+		"asset":      assetURL,
 		"host":       func(p string) string { h, _, _ := strings.Cut(p, "/"); return h },
 		"docBlocks":  project.DocBlocks,
 		"since":      project.Since,
@@ -137,7 +139,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 	}
 	user := s.currentUser(r)
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, "base", page{Title: title, User: user, Data: data, ProxyURL: s.siteURL + proxyPrefix, ModuleHost: s.moduleHost, ZeroConfig: s.zeroConfig, Feed: feedOf(data)}); err != nil {
+	if err := t.ExecuteTemplate(&buf, "base", page{Title: title, User: user, Data: data, ProxyURL: s.siteURL + proxyPrefix, ModuleHost: s.moduleHost, ZeroConfig: s.zeroConfig, Feed: feedOf(data), SiteURL: s.siteURL}); err != nil {
 		s.serverError(w, r, fmt.Errorf("render %s: %w", name, err))
 		return
 	}

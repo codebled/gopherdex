@@ -97,6 +97,7 @@ type server struct {
 	reportLimit *ratelimit.Limiter
 	searchLimit *ratelimit.Limiter
 	mintLimit   *ratelimit.Limiter
+	pubCache    publicCache
 
 	admins       map[string]bool
 	githubOIDC   *oidc.Verifier
@@ -224,10 +225,12 @@ func New(cfg Config) (http.Handler, error) {
 	mux.Handle("GET "+proxyPrefix+"/", http.StripPrefix(proxyPrefix, cfg.Proxy))
 
 	mux.HandleFunc("GET /tokens.css", s.handleTokens)
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	mux.Handle("GET /static/", serveStatic(static))
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		if staticCache("favicon.ico", w, r) {
+			return
+		}
 		w.Header().Set("Content-Type", "image/x-icon")
-		w.Header().Set("Cache-Control", "public, max-age=86400")
 		w.Write(favicon)
 	})
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
@@ -320,6 +323,16 @@ type searchData struct {
 	PrevURL, NextURL                     string
 	Licenses, GoVersions                 []registry.Facet
 	ModuleHost                           string
+
+	// Scope is "all" (hosted and public modules ranked together) or
+	// "hosted" (this registry only, with filters, sorting and paging).
+	Scope                    string
+	ScopeNote                string // why public modules aren't shown
+	AllURL, HostedURL        string
+	Results                  []unifiedRow // scope "all"
+	HostedTotal              int
+	HostedShown, PublicShown int
+	PublicError              string
 }
 
 const resultsPerPage = 20
@@ -363,7 +376,42 @@ func (s *server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 		data.Page = 1
 	}
 
+	// Hosted and public modules are ranked together unless the visitor
+	// asked for this registry only, or used filters or sorts that only
+	// hosted modules support.
+	scopeURL := func(scope string) string {
+		v := url.Values{"q": {data.Query}}
+		if scope != "" {
+			v.Set("scope", scope)
+		}
+		return "/search?" + v.Encode()
+	}
+	data.AllURL, data.HostedURL = scopeURL(""), scopeURL("hosted")
+	canUnify := data.Public && data.Query != ""
+	hostedOnly := data.Filtered || data.Sort != string(registry.SortRelevance) || data.Page > 1
+	data.Scope = "hosted"
+	switch {
+	case !canUnify || q.Get("scope") == "hosted":
+	case hostedOnly:
+		data.ScopeNote = "Filters, sorting and pages apply to modules on Gopherdex, so public modules from pkg.go.dev aren't shown."
+	default:
+		data.Scope = "all"
+	}
+
 	ctx := r.Context()
+	if data.Scope == "all" {
+		if err := s.unifiedSearch(ctx, &data); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		var err error
+		if data.Licenses, data.GoVersions, err = s.registry.Facets(ctx); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		s.render(w, r, http.StatusOK, "search", data.Query, data)
+		return
+	}
 	hits, total, err := s.registry.Search(ctx, registry.SearchQuery{
 		Text: data.Query, License: data.License, GoMax: data.GoMax, UpdatedWithin: updatedWindows[data.Updated],
 		HideDeprecated: data.HideDeprecated, Sort: registry.Sort(data.Sort),
@@ -381,7 +429,7 @@ func (s *server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	}
 	pageURL := func(page int) string {
 		v := url.Values{}
-		for _, k := range []string{"q", "license", "go", "updated", "sort", "hide_deprecated"} {
+		for _, k := range []string{"q", "scope", "license", "go", "updated", "sort", "hide_deprecated"} {
 			if val := q.Get(k); val != "" {
 				v.Set(k, val)
 			}

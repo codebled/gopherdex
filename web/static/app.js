@@ -93,32 +93,6 @@
   }
   document.querySelector(".filter-actions button")?.setAttribute("hidden", "");
 
-  // Public modules from pkg.go.dev load after the registry's own results.
-  const publicBox = $("public-results");
-  if (publicBox) loadPublicResults(publicBox);
-
-  async function loadPublicResults(box) {
-    const list = $("public-list");
-    box.hidden = false;
-    list.replaceChildren(h("li", { class: "muted loading-row" }, "Searching pkg.go.dev…"));
-    try {
-      const data = await getJSON(`/api/search?q=${encodeURIComponent(box.dataset.query)}&scope=public`, "public");
-      list.replaceChildren(...data.results.map(resultItem));
-      box.hidden = data.results.length === 0;
-    } catch (error) {
-      if (error.name !== "AbortError") box.hidden = true;
-    }
-  }
-
-  function resultItem(r) {
-    if (r.synopsis) synopses.set(r.path, r.synopsis);
-    return h("li", {},
-      h("a", { class: "result", href: `/?m=${encodeURIComponent(r.path)}` },
-        h("span", { class: "result-path" }, r.path),
-        h("span", { class: "result-meta" }, r.version && h("span", { class: "pill p-version" }, r.version)),
-        h("p", { class: "result-syn" }, r.synopsis || "No summary.")));
-  }
-
   // ---------- Library view for public modules (/?m=…) ----------
   const librarySection = $("library");
   const libraryBody = $("library-body");
@@ -141,7 +115,7 @@
       showLibrary(state, scroll);
     } else {
       librarySection.hidden = true;
-      document.title = "Gopherdex · Go library search";
+      document.title = "Gopherdex · The Go module registry";
     }
   }
 

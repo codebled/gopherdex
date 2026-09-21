@@ -47,7 +47,18 @@
       </form>
 
       <div class="search-results">
+        {{if and .Public .Query}}
+        <nav class="scope-toggle" aria-label="Where to search">
+          <a href="{{.AllURL}}"{{if eq .Scope "all"}} aria-current="page"{{end}}>All Go modules</a>
+          <a href="{{.HostedURL}}"{{if eq .Scope "hosted"}} aria-current="page"{{end}}>On Gopherdex</a>
+        </nav>
+        {{end}}
+        {{with .ScopeNote}}<p class="notice">{{.}} <a href="{{$.Data.AllURL}}">Search all Go modules</a></p>{{end}}
         <div class="results-bar">
+          {{if eq .Scope "all"}}
+          <h1 class="results-title">Results for “{{.Query}}”</h1>
+          <p class="muted results-count">{{.HostedShown}} on Gopherdex · {{.PublicShown}} from pkg.go.dev</p>
+          {{else}}
           <h1 class="results-title">{{if .Query}}{{.Total}} result{{if ne .Total 1}}s{{end}} for “{{.Query}}”{{else}}{{.Total}} module{{if ne .Total 1}}s{{end}}{{end}}</h1>
           <form action="/search" method="get" class="sort-form">
             <input type="hidden" name="q" value="{{.Query}}">
@@ -64,9 +75,42 @@
             </select>
             <noscript><button class="btn btn-outline btn-sm" type="submit">Sort</button></noscript>
           </form>
+          {{end}}
         </div>
 
-        {{if .Hits}}
+        {{if eq .Scope "all"}}
+        {{with .PublicError}}<p class="notice">{{.}}</p>{{end}}
+        {{if .Results}}
+        <ol class="module-rows module-rows-wide">
+          {{range .Results}}
+          <li>
+            <a class="module-row" href="{{projectURL $.Data.ModuleHost .Path}}">
+              <span class="row-top">
+                <code class="row-name">{{breakable .Path}}</code>
+                <span class="row-pills">{{if .Hosted}}<span class="pill p-hosted">Gopherdex</span>{{else}}<span class="pill p-public">pkg.go.dev</span>{{end}}{{with .Version}}<span class="pill p-version">{{.}}</span>{{end}}</span>
+              </span>
+              {{with .Synopsis}}<span class="row-syn">{{.}}</span>{{end}}
+              <span class="row-meta">
+                {{if .Hosted}}
+                {{if .Deprecated}}<span class="pill p-retracted">Deprecated</span>{{end}}
+                {{if .Vulnerable}}<span class="pill p-retracted">Known vulnerability</span>{{end}}
+                {{with .Hit}}@{{.Namespace}}{{with .License}} · {{.}}{{end}}{{end}}
+                · {{number .Downloads30}} download{{if ne .Downloads30 1}}s{{end}} this month
+                {{if .UsedBy}} · used by {{.UsedBy}} module{{if ne .UsedBy 1}}s{{end}}{{end}}
+                {{if .Verified}} · verified source{{end}}
+                {{else}}
+                Public Go module · docs on pkg.go.dev
+                {{end}}
+              </span>
+            </a>
+          </li>
+          {{end}}
+        </ol>
+        {{if gt .HostedTotal .HostedShown}}<p class="muted"><a href="{{.HostedURL}}">See all {{.HostedTotal}} matching modules on Gopherdex</a>, with filters and sorting.</p>{{end}}
+        {{else}}
+        <p class="empty">No Go modules match “{{.Query}}”. Try a shorter or different word.</p>
+        {{end}}
+        {{else if .Hits}}
         <ol class="module-rows module-rows-wide">
           {{range .Hits}}
           <li>
@@ -94,12 +138,6 @@
         <p class="empty">{{if .Query}}No modules on Gopherdex match “{{.Query}}”{{if .Filtered}} with these filters{{end}}. Try a shorter or different word{{if .Filtered}}, or clear the filters{{end}}.{{else if .Filtered}}No modules match these filters.{{else}}No modules have been published yet. <a href="/signup">Create an account</a> to publish the first one.{{end}}</p>
         {{end}}
 
-        {{if and .Query .Public}}
-        <div id="public-results" data-query="{{.Query}}" hidden>
-          <h2 class="public-title">More Go modules <span class="muted">from pkg.go.dev</span></h2>
-          <ol class="result-list" id="public-list"></ol>
-        </div>
-        {{end}}
       </div>
     </div>
   </div>

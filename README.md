@@ -15,7 +15,7 @@ A package registry for Go modules, in the spirit of pypi.org.
 - **Discovery:** full-text search with filters (license, Go version, last release, deprecated) and sorting (relevance, downloads, recently updated, newest), download counts and charts, and a home page with just-updated, most-downloaded and new modules. Public pkg.go.dev results follow in their own section.
 - **Public modules:** modules that aren't hosted here come from `proxy.golang.org`, with search and docs from `pkg.go.dev`. Run with `-offline` to turn this off.
 
-Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done) → documentation and dependency graph (done) → badges and public JSON API (done) → publish-time safety checks (done) → unified search (done) → passkeys (done).
+Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done) → documentation and dependency graph (done) → badges and public JSON API (done) → publish-time safety checks (done) → unified search (done) → passkeys (done) → organization teams (done).
 
 ## Run it
 
@@ -54,6 +54,7 @@ Open http://localhost:8080 and choose **Register**. Without `-smtp-addr`, emails
 | `-backup-dir` / `-backup-every` / `-backup-keep` | (off) / `24h` / `7` | Automatic database backups |
 | `-trusted-publishing` | `true` | Let GitHub Actions workflows publish with OIDC ID tokens. Off with `-offline`, because it fetches GitHub's signing keys |
 | `-oidc-audience` | module host | Audience GitHub ID tokens must be requested for |
+| `-listing-cache` | `30s` | How long the home page's listings and registry totals are cached; `0` turns caching off |
 | `-publish-checks` | `true` | Scan uploads before publishing (see **Trust and safety**) |
 | `-playground` | `https://play.golang.org` | Go Playground that documentation examples open in. Empty, or `-offline`, hides the Run buttons |
 | `-vulndb` | `https://vuln.go.dev` | Public Go vulnerability database merged into `/vulndb` and used to flag vulnerable dependencies. Empty, or `-offline`, turns it off |
@@ -301,10 +302,24 @@ Create one on your account page. It gets its own namespace, for example `gopherd
 
 | Role | Can |
 |---|---|
-| **Owner** | Manage members, and act as owner of every module in the namespace |
-| **Member** | Publish new modules under the namespace, and publish and yank existing ones |
+| **Owner** | Manage members and teams, and act as owner of every module in the namespace |
+| **Member** | Publish new modules under the namespace, and publish and yank existing ones (or, with access **only through teams**, the ones their teams cover) |
 
 Organizations and users share one namespace list, so a name can't be both.
+
+#### Teams
+
+A team is a group of an organization's members with a role on chosen modules: for example `@acme/backend` as owner of `acme/api` and `acme/worker`. Owners create teams in the Teams panel on the organization page. Each team has a page at `/orgs/<org>/teams/<team>`, where owners add members and give the team a role on modules.
+
+| Setting | Member access to existing modules |
+|---|---|
+| **Every module** (default) | Every member maintains every module, as before teams. Teams add owner access where it's needed |
+| **Only through teams** | Members maintain only the modules their teams (or a direct role on the module) cover. A member who publishes a new module maintains it. Owners keep full access |
+
+- **Who can see teams:** only the organization's members. Visitors see the member list, as before.
+- **Membership:** only organization members can join a team. Leaving the organization leaves its teams, and deleting a team removes the access it gave.
+- **On the module:** the Manage tab lists the teams with access, next to people given access to that module alone.
+- **Notices:** being added to a team sends an email (the "given access" preference). Release and publish-check emails go to the people who actually have access.
 
 ## Trust and safety
 
@@ -336,6 +351,46 @@ Database backups use SQLite's `VACUUM INTO`, which makes a consistent copy of th
 
 To restore, stop the server, put the database file and the blob directory back, and start it again.
 
+## Load testing
+
+`gdxbench` builds a large, realistic registry and measures a server under load.
+
+```sh
+make bench-seed                 # small: 5,000 modules, ~25,000 versions (~5 minutes)
+make bench-seed PROFILE=full    # 100,000 modules, ~1,000,000 versions (hours)
+make bench-serve                # serve bench/data offline on :8080, trusting X-Forwarded-For
+make bench-load                 # 32 clients for 60 seconds
+```
+
+**What `seed` builds.** Real modules are sampled from `index.golang.org`, in windows spread from 2020 to now, so old and new modules are mixed. Their `go.mod` files come from `proxy.golang.org`, and some get their real source zips. Their paths are remapped under the registry's host (`github.com/spf13/cobra` becomes `gopherdex.localhost/spf13/cobra`), and their requirements are rewritten to match. Synthetic modules fill the set up to the target size. The busiest real owners get their own namespaces, and vanity domains become organizations. Everything is published through `Registry.Publish`, so zip checks, publish checks, search indexing and the dependency graph all run as they do for real uploads. It then records 30 days of downloads, spread by popularity. It writes `bench/data/seed-report.json`, with publish latency, and `modules.tsv` for the load tool.
+
+- **Upstream use:** everything downloaded is cached under `bench/cache`, so rebuilding a dataset downloads nothing. Fetches run 8 at a time and identify themselves in `User-Agent`.
+- **Every Go module?** Not possible: the public mirror has millions of modules and tens of millions of versions, and their paths belong to other hosts. Public modules already reach Gopherdex live through `proxy.golang.org`. The benchmark measures this registry's own code at a known size.
+
+**What `load` does.** Clients pick modules by a Zipf distribution, so a few are hot and most are cold, as on a real registry. They send a registry-like mix of traffic:
+- the go command's proxy requests;
+- project pages and tabs;
+- search;
+- the JSON API, badges, feeds and `go-get` lookups.
+
+Each client sends a different `X-Forwarded-For` address, so run the server with `-trust-proxy` to load it as many users would, instead of tripping one client's rate limits. The report gives requests per second, errors, and p50/p90/p99/max latency per scenario. `-mix only=search` isolates one scenario, `-rps` fixes the request rate, and `-out` saves JSON. It refuses non-local servers unless given `-i-own-this-server`.
+
+**Results** on an Apple-silicon laptop, small dataset, 32 clients, 60 seconds:
+
+| | Before tuning | After tuning |
+|---|---|---|
+| Throughput | 50 req/s | 1,511 req/s |
+| p50 / p99, all requests | 22 ms / 3.08 s | 15 ms / 91 ms |
+| Project page p50 | 1.54 s | 21 ms |
+| Home page p50 | 1.15 s | 0.4 ms |
+| GOPROXY requests p50 | 1–2 ms | 2–4 ms |
+| Publish, per version | 7 ms p50, 17 ms p99 | |
+
+What the first run found, and what fixed it:
+- **"Used by" counts** found every module's latest release before counting a module's dependents: about 50 ms at 5,000 modules, and growing with the registry. They now start from the few versions that require the module and check each against a new index, `versions_latest`.
+- **The home page** ranked every module by downloads and counted every version on each view. Its listings and the registry totals are now cached for `-listing-cache` (30 seconds by default), and concurrent requests share one load.
+- **Name checks at publish** ranked every module by downloads for each new module. On registries large enough for this to cost anything, the ranking is now reused for 10 minutes.
+
 ## Accounts and API tokens
 
 | Route | |
@@ -354,7 +409,8 @@ To restore, stop the server, put the database file and the blob directory back, 
 | `POST /account/tokens`, `POST /account/tokens/{id}/revoke` | Create or revoke a token (requires a verified email) |
 | `GET /api/whoami` | `Authorization: Bearer gdx_…` returns the token's user, namespaces (own and organizations') and scope |
 | `POST /api/yank` | Bearer token; JSON `{"module", "version", "reason", "yank": true\|false}` |
-| `POST /-/yank`, `/-/unyank`, `/-/deprecate`, `/-/undeprecate`, `/-/collaborators[/remove]`, `/-/orgs`, `/-/orgs/members[/remove]` | Website forms behind the Manage tab, the account page and organization pages |
+| `POST /-/yank`, `/-/unyank`, `/-/deprecate`, `/-/undeprecate`, `/-/collaborators[/remove]`, `/-/orgs`, `/-/orgs/members[/remove]`, `/-/orgs/access` | Website forms behind the Manage tab, the account page and organization pages |
+| `GET /orgs/<org>/teams/<team>`, `POST /-/orgs/teams[/delete]`, `/-/orgs/teams/members[/remove]`, `/-/orgs/teams/modules[/remove]` | Team pages (organization members only) and the forms owners manage teams with |
 | `GET /api/oidc/audience` | The audience CI must request its ID token for |
 | `POST /api/oidc/mint-token` | JSON `{"token": "<GitHub Actions ID token>", "module": "<path>"}` returns `{"token","expiresAt","module","publisher"}`: a 15-minute token for that module |
 | `POST /-/publishers`, `/-/publishers/remove` | Add or remove trusted publishers (Manage tab, or the account page before a module's first release) |
@@ -426,6 +482,8 @@ Zips follow the module zip rules: files go under `<module>@<version>/`, and VCS 
 ```
 cmd/gopherdexd/       registry server: flags, wiring, graceful shutdown
 cmd/gopherdex/        author CLI: login, whoami, publish, logout
+cmd/gdxbench/         load testing: build a large dataset (seed) and drive traffic at a server (load)
+internal/bench/       dataset sampling from index.golang.org, remapping, synthetic modules, load generator
 internal/cli/         CLI implementation (git tags → module zip → upload)
 internal/registry/    publish validation, immutable versions, serving published modules, import path lookup,
                       roles, yanking, deprecation, organizations, full-text search, download counts
@@ -461,4 +519,10 @@ make build  # bin/gopherdexd and bin/gopherdex
 
 ## License
 
-[MIT](LICENSE)
+Copyright (C) 2026 Parthiban Sivakumar
+
+Gopherdex is free software: you can redistribute it and/or modify it under the terms of the [GNU Affero General Public License](LICENSE) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+In short: you may use, study, change and share it. If you run a modified version as a service that others use over a network, you must offer those users the source code of your version, under the same license (section 13).
+
+Versions released before 21 September 2026 were licensed under the MIT License, and copies of those versions keep that license.

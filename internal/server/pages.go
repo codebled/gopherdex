@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
+	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
 	"github.com/parthiban-sivakumar/gopherdex/internal/project"
 	"github.com/parthiban-sivakumar/gopherdex/internal/version"
 	"github.com/parthiban-sivakumar/gopherdex/web"
@@ -72,6 +73,30 @@ func parsePages() (map[string]*template.Template, error) {
 		},
 		"projectPage": func(moduleHost, modPath string) bool {
 			return strings.HasPrefix(modPath, moduleHost+"/")
+		},
+		// moduleLink links any module: its project page here, or pkg.go.dev.
+		"moduleLink": func(moduleHost, modPath string) string {
+			if rest, ok := strings.CutPrefix(modPath, moduleHost); ok && strings.HasPrefix(rest, "/") {
+				return rest
+			}
+			return "https://pkg.go.dev/" + modPath
+		},
+		"inc":       func(i int) int { return i + 1 },
+		"symAnchor": godoc.SymbolAnchor,
+		// dict builds a map for passing several values to a template.
+		"dict": func(kv ...any) (map[string]any, error) {
+			if len(kv)%2 != 0 {
+				return nil, fmt.Errorf("dict: odd number of arguments")
+			}
+			m := map[string]any{}
+			for i := 0; i < len(kv); i += 2 {
+				k, ok := kv[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: key %v isn't a string", kv[i])
+				}
+				m[k] = kv[i+1]
+			}
+			return m, nil
 		},
 		"relPath": func(modPath, importPath string) string {
 			if rel := strings.TrimPrefix(strings.TrimPrefix(importPath, modPath), "/"); rel != "" {

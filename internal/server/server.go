@@ -68,6 +68,9 @@ type Config struct {
 	// VulnDB is a copy of the public Go vulnerability database, merged into
 	// /vulndb and used to flag vulnerable dependencies. Nil when offline.
 	VulnDB *vulndb.Upstream
+	// PlaygroundURL is the Go Playground that "Run" buttons on examples
+	// share code with, e.g. https://play.golang.org. Empty hides them.
+	PlaygroundURL string
 }
 
 type server struct {
@@ -98,6 +101,9 @@ type server struct {
 	admins       map[string]bool
 	githubOIDC   *oidc.Verifier
 	vulnUpstream *vulndb.Upstream
+
+	playground    bool
+	playgroundURL string
 }
 
 // New returns the application's root handler.
@@ -152,6 +158,8 @@ func New(cfg Config) (http.Handler, error) {
 		admins:        map[string]bool{},
 		githubOIDC:    cfg.GitHubOIDC,
 		vulnUpstream:  cfg.VulnDB,
+		playground:    cfg.PlaygroundURL != "",
+		playgroundURL: strings.TrimSuffix(cfg.PlaygroundURL, "/"),
 	}
 	for _, a := range cfg.Admins {
 		s.admins[accounts.NormalizeUsername(a)] = true
@@ -227,6 +235,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	mux.HandleFunc("GET /feeds/{path...}", s.limited(s.handleFeed))
 	mux.HandleFunc("GET /vulndb/{path...}", s.handleVulnDB)
+	mux.HandleFunc("POST /-/play", s.limited(s.handlePlay))
 	mux.HandleFunc("GET /advisories", s.handleAdvisories)
 	mux.HandleFunc("GET /advisories/{id}", s.handleAdvisory)
 	mux.HandleFunc("POST /-/advisories", s.handleCreateAdvisory)
@@ -483,7 +492,7 @@ func securityHeaders(https bool, next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' https://fonts.googleapis.com; "+
-			"font-src https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+			"font-src https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://go.dev")
 		next.ServeHTTP(w, r)
 	})
 }

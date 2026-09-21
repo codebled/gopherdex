@@ -301,6 +301,13 @@ func (r *Registry) Publish(ctx context.Context, u Upload) (*Published, error) {
 		}
 		return sameOrConflict(prev, h1)
 	}
+	versionID, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("publish %s@%s: %w", u.Module, u.Version, err)
+	}
+	if err := recordRequires(ctx, tx, versionID, goMod); err != nil {
+		return nil, err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_log (user_id, action, detail, ip, created_at) VALUES (?, 'module.published', ?, ?, ?)`,
 		u.User.ID, fmt.Sprintf("%s@%s token=%d %s", u.Module, u.Version, u.Token.ID, h1), u.Client.IP, now.Unix()); err != nil {
 		return nil, fmt.Errorf("audit publish: %w", err)

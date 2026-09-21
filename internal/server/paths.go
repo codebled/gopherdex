@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
 	"github.com/parthiban-sivakumar/gopherdex/internal/module"
 	"github.com/parthiban-sivakumar/gopherdex/internal/project"
 	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
@@ -102,15 +103,9 @@ func (s *server) writeGoImport(w http.ResponseWriter, r *http.Request, root stri
 }
 
 // pkgID is the anchor of a package on the docs tab.
-func pkgID(modPath, importPath string) string {
-	rel := strings.TrimPrefix(strings.TrimPrefix(importPath, modPath), "/")
-	if rel == "" {
-		return "pkg"
-	}
-	return "pkg-" + strings.ReplaceAll(rel, "/", "-")
-}
+func pkgID(modPath, importPath string) string { return godoc.PackageAnchor(modPath, importPath) }
 
-var projectTabs = map[string]bool{"": true, "docs": true, "versions": true, "files": true, "security": true, "manage": true}
+var projectTabs = map[string]bool{"": true, "docs": true, "deps": true, "versions": true, "files": true, "source": true, "security": true, "manage": true}
 
 type projectData struct {
 	*project.Page
@@ -140,6 +135,20 @@ type projectData struct {
 	VulnDBOn      bool
 	AdvisoryForm  advisoryForm
 	AdvisoryField string
+
+	UsedBy       int // hosted modules whose latest release requires this one
+	UsedByDirect int
+	Dependents   []dependentRow // deps tab
+	Source       *project.SourceFile
+	SourcePath   string
+	Playground   bool // examples can be opened in the Go Playground
+}
+
+// dependentRow is a module that uses the one shown, and whether the
+// version it requires has a known vulnerability.
+type dependentRow struct {
+	registry.Dependent
+	Vulnerable bool
 }
 
 func (s *server) handleProject(w http.ResponseWriter, r *http.Request, modPath, version string) {
@@ -220,6 +229,39 @@ func (s *server) renderProjectFull(w http.ResponseWriter, r *http.Request, modPa
 		}
 	}
 	data.VulnDBOn = s.vulnUpstream != nil
+	data.Playground = s.playground
+	if data.UsedByDirect, data.UsedBy, err = s.registry.DependentCounts(r.Context(), modPath); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	switch tab {
+	case "deps":
+		deps, err := s.registry.Dependents(r.Context(), modPath, 500)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		for _, d := range deps {
+			row := dependentRow{Dependent: d}
+			for _, a := range data.Advisories {
+				if a.Affects(d.Requires) {
+					row.Vulnerable = true
+				}
+			}
+			data.Dependents = append(data.Dependents, row)
+		}
+	case "source":
+		data.SourcePath = r.URL.Query().Get("file")
+		if data.SourcePath == "" {
+			data.SourcePath = "go.mod"
+		}
+		if data.Source, err = s.project.Source(r.Context(), modPath, p.Version, data.SourcePath); errors.Is(err, module.ErrNotFound) {
+			data.Source, err = nil, nil
+		} else if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	if tab == "security" {
 		reqs := make([]struct{ Path, Version string }, len(p.Requires))
 		for i, req := range p.Requires {

@@ -3,6 +3,7 @@
 package project
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"html/template"
@@ -11,9 +12,11 @@ import (
 	"log/slog"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	xmodule "golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
@@ -58,6 +61,7 @@ type Page struct {
 	Packages    []godoc.Package
 	DocsError   string
 	FilesCount  int
+	FileList    []string // paths in the module zip
 
 	ZipURL  string
 	ModURL  string
@@ -102,6 +106,7 @@ type versionContent struct {
 	packages    []godoc.Package
 	docsErr     string
 	files       int
+	fileList    []string // every file in the zip, sorted
 	goMod       *gomod.File
 }
 
@@ -177,6 +182,7 @@ func (s *Service) Page(ctx context.Context, modPath, version string) (*Page, err
 		Packages:          content.packages,
 		DocsError:         content.docsErr,
 		FilesCount:        content.files,
+		FileList:          content.fileList,
 		RepoURL:           detail.Repository,
 		DeprecationNotice: m.Deprecation,
 		Successor:         m.Successor,
@@ -276,9 +282,10 @@ func (s *Service) content(ctx context.Context, modPath, version string) (*versio
 	if err != nil {
 		return nil, fmt.Errorf("list files of %s: %w", key, err)
 	}
-	fs.WalkDir(fsys, ".", func(_ string, d fs.DirEntry, err error) error {
+	fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
 			c.files++
+			c.fileList = append(c.fileList, p)
 		}
 		return nil
 	})
@@ -303,7 +310,7 @@ func (s *Service) content(ctx context.Context, modPath, version string) (*versio
 			c.goMod = f
 		}
 	}
-	if c.packages, err = godoc.Extract(ctx, fsys, modPath); err != nil {
+	if c.packages, err = godoc.ExtractWith(ctx, fsys, modPath, godoc.Options{ExternalURL: s.docURL}); err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -422,4 +429,68 @@ func plural(n int, unit string) string {
 		return "1 " + unit
 	}
 	return fmt.Sprintf("%d %ss", n, unit)
+}
+
+// docURL links documentation to packages outside the module being shown:
+// modules hosted here link to their own pages, everything else to
+// pkg.go.dev.
+func (s *Service) docURL(importPath, symbol string) string {
+	if rest, ok := strings.CutPrefix(importPath, s.ModuleHost+"/"); ok {
+		// /<owner>/<module>/<package> redirects to the package's docs.
+		return "/" + rest
+	}
+	u := "https://pkg.go.dev/" + importPath
+	if symbol != "" {
+		u += "#" + symbol
+	}
+	return u
+}
+
+// maxSourceSize is the largest file the source view shows.
+const maxSourceSize = 1 << 20
+
+// SourceFile is one file of a published version, for the source view.
+type SourceFile struct {
+	Path     string
+	Lines    []string
+	Size     int64
+	Binary   bool // not shown
+	TooLarge bool // not shown
+}
+
+// Source returns a file from a published version's zip, exactly as the
+// go command downloads it.
+func (s *Service) Source(ctx context.Context, modPath, version, file string) (*SourceFile, error) {
+	content, err := s.content(ctx, modPath, version)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(content.fileList, file) {
+		return nil, fmt.Errorf("%s@%s/%s: %w", modPath, version, file, module.ErrNotFound)
+	}
+	fsys, closer, err := s.Registry.VersionFS(ctx, modPath, version)
+	if err != nil {
+		return nil, err
+	}
+	defer closer.Close()
+	st, err := fs.Stat(fsys, file)
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", file, err)
+	}
+	sf := &SourceFile{Path: file, Size: st.Size()}
+	if st.Size() > maxSourceSize {
+		sf.TooLarge = true
+		return sf, nil
+	}
+	data, err := fs.ReadFile(fsys, file)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", file, err)
+	}
+	if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
+		sf.Binary = true
+		return sf, nil
+	}
+	text := strings.ReplaceAll(string(data), "\r\n", "\n")
+	sf.Lines = strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	return sf, nil
 }

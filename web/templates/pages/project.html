@@ -50,8 +50,10 @@
         <nav class="side-tabs" aria-label="Project sections">
           <a href="{{.VersionURL}}"{{if eq .Tab ""}} aria-current="page"{{end}}>Description</a>
           <a href="{{.VersionURL}}?tab=docs"{{if eq .Tab "docs"}} aria-current="page"{{end}}>Documentation <span>{{len .Packages}}</span></a>
+          <a href="{{.VersionURL}}?tab=deps"{{if eq .Tab "deps"}} aria-current="page"{{end}}>Dependencies <span>{{len .Requires}}</span></a>
           <a href="{{.VersionURL}}?tab=versions"{{if eq .Tab "versions"}} aria-current="page"{{end}}>Release history <span>{{len .Versions}}</span></a>
           <a href="{{.VersionURL}}?tab=files"{{if eq .Tab "files"}} aria-current="page"{{end}}>Download files</a>
+          <a href="{{.VersionURL}}?tab=source"{{if eq .Tab "source"}} aria-current="page"{{end}}>Source <span>{{.FilesCount}}</span></a>
           <a href="{{.VersionURL}}?tab=security"{{if eq .Tab "security"}} aria-current="page"{{end}}>Security{{if .ActiveCount}} <span class="warn-count">{{.ActiveCount}}</span>{{end}}</a>
           {{if .CanManage}}<a class="manage-link" href="{{.URL}}?tab=manage"{{if eq .Tab "manage"}} aria-current="page"{{end}}>Manage <span>{{.Role}}</span></a>{{end}}
         </nav>
@@ -101,7 +103,8 @@
             {{if .Detail.Provenance}}<dt>Published by</dt><dd>GitHub Actions{{with .Detail.PublishedBy}}, set up by @{{.}}{{end}}</dd>
             {{else}}{{with .Detail.PublishedBy}}<dt>Published by</dt><dd>@{{.}}</dd>{{end}}{{end}}
             {{with .GoVersion}}<dt>Go</dt><dd>{{.}}</dd>{{end}}
-            <dt>Requires</dt><dd>{{len .Requires}} module{{if ne (len .Requires) 1}}s{{end}}</dd>
+            <dt>Requires</dt><dd><a href="{{.VersionURL}}?tab=deps">{{len .Requires}} module{{if ne (len .Requires) 1}}s{{end}}</a></dd>
+            <dt>Used by</dt><dd><a href="{{.VersionURL}}?tab=deps#usedby-title">{{.UsedBy}} module{{if ne .UsedBy 1}}s{{end}}</a></dd>
             <dt>Size</dt><dd>{{.FilesCount}} files, {{bytes .Detail.Size}} zipped</dd>
           </dl>
         </section>
@@ -141,27 +144,51 @@
           <h2 class="tab-title">Documentation</h2>
           {{with .DocsError}}<p class="notice">{{.}}</p>{{end}}
           {{if .Packages}}
+          {{if gt (len .Packages) 1}}
           <nav class="pkg-index" aria-label="Packages">
             <ul>
-              {{range .Packages}}<li><a href="#{{pkgID $.Data.Path .ImportPath}}"><code>{{relPath $.Data.Path .ImportPath}}</code></a> <span class="muted">{{.Synopsis}}</span></li>{{end}}
+              {{range .Packages}}<li><a href="#{{.Anchor}}"><code>{{relPath $.Data.Path .ImportPath}}</code></a> <span class="muted">{{.Synopsis}}</span></li>{{end}}
             </ul>
           </nav>
-          {{range .Packages}}
-          <section class="pkg-doc" id="{{pkgID $.Data.Path .ImportPath}}">
-            <h3><code>{{.ImportPath}}</code></h3>
-            <div class="doc-text">{{range docBlocks .Doc}}{{if .Code}}<pre>{{.Text}}</pre>{{else}}<p>{{.Text}}</p>{{end}}{{end}}</div>
-            {{if .Funcs}}
-            <h4>Functions</h4>
-            {{range .Funcs}}<div class="sym"><pre>{{.Decl}}</pre><div class="doc-text">{{range docBlocks .Doc}}{{if .Code}}<pre>{{.Text}}</pre>{{else}}<p>{{.Text}}</p>{{end}}{{end}}</div></div>{{end}}
-            {{end}}
+          {{end}}
+          <div class="sym-filter">
+            <label class="visually-hidden" for="sym-filter">Filter symbols</label>
+            <input id="sym-filter" type="search" placeholder="Jump to a function, type or constant…" autocomplete="off" data-sym-filter>
+          </div>
+          {{range $pkg := .Packages}}
+          <section class="pkg-doc" id="{{.Anchor}}">
+            <h3><code>{{.ImportPath}}</code>{{if .Deprecated}} <span class="pill p-retracted">Deprecated</span>{{end}}</h3>
+            <div class="cmd pkg-import"><code>import "{{.ImportPath}}"</code><button type="button" data-copy="import &#34;{{.ImportPath}}&#34;">Copy</button></div>
+            {{with .DocHTML}}<div class="doc-text">{{.}}</div>{{end}}
+            {{range .Examples}}{{template "docExample" dict "E" . "Play" $.Data.Playground}}{{end}}
+
+            <details class="sym-index" open>
+              <summary>Index</summary>
+              <ul data-sym-list>
+                {{range .Consts}}{{range .Names}}<li><a href="#{{symAnchor $.Data.Path $pkg.ImportPath .}}">const {{.}}</a></li>{{end}}{{end}}
+                {{range .Vars}}{{range .Names}}<li><a href="#{{symAnchor $.Data.Path $pkg.ImportPath .}}">var {{.}}</a></li>{{end}}{{end}}
+                {{range .Funcs}}<li><a href="#{{.Anchor}}">func {{.Name}}</a>{{if .Deprecated}} <span class="muted">(deprecated)</span>{{end}}</li>{{end}}
+                {{range $t := .Types}}
+                <li><a href="#{{.Anchor}}">type {{.Name}}</a>{{if .Deprecated}} <span class="muted">(deprecated)</span>{{end}}</li>
+                {{range .Funcs}}<li class="sub"><a href="#{{.Anchor}}">func {{.Name}}</a></li>{{end}}
+                {{range .Methods}}<li class="sub"><a href="#{{.Anchor}}">func ({{$t.Name}}) {{.Name}}</a></li>{{end}}
+                {{end}}
+              </ul>
+              <p class="muted small">{{len .Imports}} import{{if ne (len .Imports) 1}}s{{end}}{{with .Imports}}: {{range $i, $imp := .}}{{if $i}}, {{end}}<code>{{$imp}}</code>{{end}}{{end}} · Files: {{range $i, $f := .Files}}{{if $i}}, {{end}}<a href="{{$.Data.VersionURL}}?tab=source&amp;file={{$f}}">{{$f}}</a>{{end}}</p>
+            </details>
+
+            {{if .Consts}}<h4>Constants</h4>{{range .Consts}}{{template "docValue" dict "V" . "Src" $.Data.VersionURL}}{{end}}{{end}}
+            {{if .Vars}}<h4>Variables</h4>{{range .Vars}}{{template "docValue" dict "V" . "Src" $.Data.VersionURL}}{{end}}{{end}}
+            {{if .Funcs}}<h4>Functions</h4>{{range .Funcs}}{{template "docSym" dict "S" . "Title" (print "func " .Name) "Src" $.Data.VersionURL "Play" $.Data.Playground}}{{end}}{{end}}
             {{if .Types}}
             <h4>Types</h4>
-            {{range .Types}}
-            <div class="sym">
-              <pre>{{.Decl}}</pre>
-              <div class="doc-text">{{range docBlocks .Doc}}{{if .Code}}<pre>{{.Text}}</pre>{{else}}<p>{{.Text}}</p>{{end}}{{end}}</div>
-              {{range .Funcs}}<div class="sym"><pre>{{.Decl}}</pre><div class="doc-text">{{range docBlocks .Doc}}<p>{{.Text}}</p>{{end}}</div></div>{{end}}
-              {{range .Methods}}<div class="sym"><pre>{{.Decl}}</pre><div class="doc-text">{{range docBlocks .Doc}}<p>{{.Text}}</p>{{end}}</div></div>{{end}}
+            {{range $t := .Types}}
+            {{template "docSym" dict "S" .Symbol "Title" (print "type " .Name) "Src" $.Data.VersionURL "Play" $.Data.Playground}}
+            <div class="type-members">
+              {{range .Consts}}{{template "docValue" dict "V" . "Src" $.Data.VersionURL}}{{end}}
+              {{range .Vars}}{{template "docValue" dict "V" . "Src" $.Data.VersionURL}}{{end}}
+              {{range .Funcs}}{{template "docSym" dict "S" . "Title" (print "func " .Name) "Src" $.Data.VersionURL "Play" $.Data.Playground}}{{end}}
+              {{range .Methods}}{{template "docSym" dict "S" . "Title" (print "func (" $t.Name ") " .Name) "Src" $.Data.VersionURL "Play" $.Data.Playground}}{{end}}
             </div>
             {{end}}
             {{end}}
@@ -170,10 +197,72 @@
           {{else if not .DocsError}}
           <p class="empty">This version has no Go packages to document.</p>
           {{end}}
-          {{if .Requires}}
-          <h3 class="sub-title">Dependencies</h3>
-          <ul class="req-list">{{range .Requires}}<li><code>{{.Path}}</code> <span class="muted">{{.Version}}{{if .Indirect}} · indirect{{end}}</span></li>{{end}}</ul>
-          {{end}}
+
+        {{else if eq .Tab "deps"}}
+          <h2 class="tab-title">Dependencies</h2>
+          <section class="manage-block" aria-labelledby="req-title">
+            <h3 id="req-title">{{.Version}} requires</h3>
+            {{if .Requires}}
+            <ul class="req-list">
+              {{range .Requires}}{{if not .Indirect}}<li><a href="{{moduleLink $.Data.ModuleHost .Path}}"{{if not (projectPage $.Data.ModuleHost .Path)}} rel="nofollow noopener"{{end}}><code>{{.Path}}</code></a> <span class="muted">{{.Version}}</span></li>{{end}}{{end}}
+            </ul>
+            {{$indirect := 0}}{{range .Requires}}{{if .Indirect}}{{$indirect = inc $indirect}}{{end}}{{end}}
+            {{if $indirect}}
+            <details class="settings-details">
+              <summary>{{$indirect}} indirect {{if eq $indirect 1}}dependency{{else}}dependencies{{end}}</summary>
+              <ul class="req-list">
+                {{range .Requires}}{{if .Indirect}}<li><a href="{{moduleLink $.Data.ModuleHost .Path}}"{{if not (projectPage $.Data.ModuleHost .Path)}} rel="nofollow noopener"{{end}}><code>{{.Path}}</code></a> <span class="muted">{{.Version}}</span></li>{{end}}{{end}}
+              </ul>
+            </details>
+            {{end}}
+            <p class="muted small">From <a href="{{.ModURL}}">go.mod</a>. Vulnerabilities in these are on the <a href="{{.VersionURL}}?tab=security">Security tab</a>.</p>
+            {{else}}
+            <p class="muted">{{.Version}} has no dependencies.</p>
+            {{end}}
+          </section>
+
+          <section class="manage-block" aria-labelledby="usedby-title">
+            <h3 id="usedby-title">Used by {{.UsedBy}} {{if eq .UsedBy 1}}module{{else}}modules{{end}}</h3>
+            {{if .Dependents}}
+            <p class="muted">Latest releases of modules on this registry that require {{.Path}}{{if ne .UsedByDirect .UsedBy}}: {{.UsedByDirect}} directly, the rest through other dependencies{{end}}.</p>
+            <ul class="req-list">
+              {{range .Dependents}}
+              <li>
+                <a href="{{moduleLink $.Data.ModuleHost .Path}}"><code>{{.Path}}</code></a>
+                <span class="muted">{{.Version}} requires {{.Requires}}{{if .Indirect}} · indirect{{end}}</span>
+                {{if .Vulnerable}}<span class="pill p-retracted">Vulnerable version</span>{{end}}
+              </li>
+              {{end}}
+            </ul>
+            {{else}}
+            <p class="muted">No module on this registry requires {{.Path}} yet.</p>
+            {{end}}
+          </section>
+
+        {{else if eq .Tab "source"}}
+          <h2 class="tab-title">Source</h2>
+          <p class="muted">The files of {{.Version}}, exactly as the go command downloads and verifies them (<code>{{.Detail.H1}}</code>).</p>
+          <div class="source-layout">
+            <nav class="file-list" aria-label="Files">
+              {{range .FileList}}<a href="{{$.Data.VersionURL}}?tab=source&amp;file={{.}}"{{if eq . $.Data.SourcePath}} aria-current="page"{{end}}>{{.}}</a>{{end}}
+            </nav>
+            <div class="source-view">
+              {{with .Source}}
+              <div class="source-head"><code>{{.Path}}</code> <span class="muted">{{bytes .Size}}{{with .Lines}} · {{len .}} lines{{end}}</span></div>
+              {{if .Binary}}<p class="muted">Binary file; not shown.</p>
+              {{else if .TooLarge}}<p class="muted">Too large to show here. It's in the <a href="{{$.Data.ZipURL}}">module zip</a>.</p>
+              {{else}}
+              <div class="code-scroll">
+                <table class="code-lines"><tbody>
+                  {{range $i, $l := .Lines}}<tr id="L{{inc $i}}"><td class="ln"><a href="#L{{inc $i}}">{{inc $i}}</a></td><td class="lc">{{$l}}</td></tr>{{end}}
+                </tbody></table>
+              </div>
+              {{end}}
+              {{else}}
+              <p class="muted">Choose a file.</p>
+              {{end}}
+            </div>
+          </div>
 
         {{else if eq .Tab "versions"}}
           <h2 class="tab-title">Release history</h2>

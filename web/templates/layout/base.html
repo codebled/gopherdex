@@ -132,3 +132,44 @@ jobs:
   <input id="adv-credits" name="credits" type="text" maxlength="200" value="{{.Credits}}" placeholder="Who found it">
 </div>
 {{- end}}
+
+{{/* docSym renders a function, method or type heading with its docs.
+     Arguments: dict "S" symbol "Title" heading "Src" version URL "Play" bool. */}}
+{{define "docSym" -}}
+<div class="sym{{if .S.Deprecated}} is-deprecated{{end}}" id="{{.S.Anchor}}">
+  <div class="sym-head">
+    <h5><a href="#{{.S.Anchor}}">{{.Title}}</a></h5>
+    {{if .S.Deprecated}}<span class="pill p-retracted">Deprecated</span>{{end}}
+    <a class="src-link" href="{{.Src}}?tab=source&amp;file={{.S.Pos.File}}#L{{.S.Pos.Line}}">{{.S.Pos.File}}:{{.S.Pos.Line}}</a>
+  </div>
+  <pre class="decl">{{.S.Decl}}</pre>
+  {{with .S.DocHTML}}<div class="doc-text">{{.}}</div>{{end}}
+  {{range .S.Examples}}{{template "docExample" dict "E" . "Play" $.Play}}{{end}}
+</div>
+{{- end}}
+
+{{define "docValue" -}}
+<div class="sym{{if .V.Deprecated}} is-deprecated{{end}}" id="{{.V.Anchor}}">
+  <div class="sym-head">
+    {{if .V.Deprecated}}<span class="pill p-retracted">Deprecated</span>{{end}}
+    <a class="src-link" href="{{.Src}}?tab=source&amp;file={{.V.Pos.File}}#L{{.V.Pos.Line}}">{{.V.Pos.File}}:{{.V.Pos.Line}}</a>
+  </div>
+  <pre class="decl">{{.V.Decl}}</pre>
+  {{with .V.DocHTML}}<div class="doc-text">{{.}}</div>{{end}}
+</div>
+{{- end}}
+
+{{define "docExample" -}}
+<details class="example" id="{{.E.Anchor}}">
+  <summary>Example{{with .E.Name}} {{.}}{{end}}{{with .E.Suffix}} ({{.}}){{end}}</summary>
+  {{with .E.Doc}}<p class="muted">{{.}}</p>{{end}}
+  <pre class="code">{{.E.Code}}</pre>
+  {{with .E.Output}}<p class="example-label">Output:</p><pre class="output">{{.}}</pre>{{end}}
+  {{if and .Play .E.Play}}
+  <form class="play-form" action="/-/play" method="post" target="_blank">
+    <input type="hidden" name="code" value="{{.E.Play}}">
+    <button class="btn btn-outline btn-sm" type="submit">Run in the Go Playground</button>
+  </form>
+  {{end}}
+</details>
+{{- end}}

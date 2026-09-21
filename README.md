@@ -10,7 +10,7 @@ A package registry for Go modules, in the spirit of pypi.org.
 - **Discovery:** full-text search with filters (license, Go version, last release, deprecated) and sorting (relevance, downloads, recently updated, newest), download counts and charts, and a home page with just-updated, most-downloaded and new modules. Public pkg.go.dev results follow in their own section.
 - **Public modules:** modules that aren't hosted here come from `proxy.golang.org`, with search and docs from `pkg.go.dev`. Run with `-offline` to turn this off.
 
-Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done).
+Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done) → documentation and dependency graph (done).
 
 ## Run it
 
@@ -49,6 +49,7 @@ Open http://localhost:8080 and choose **Register**. Without `-smtp-addr`, emails
 | `-backup-dir` / `-backup-every` / `-backup-keep` | (off) / `24h` / `7` | Automatic database backups |
 | `-trusted-publishing` | `true` | Let GitHub Actions workflows publish with OIDC ID tokens. Off with `-offline`, because it fetches GitHub's signing keys |
 | `-oidc-audience` | module host | Audience GitHub ID tokens must be requested for |
+| `-playground` | `https://play.golang.org` | Go Playground that documentation examples open in. Empty, or `-offline`, hides the Run buttons |
 | `-vulndb` | `https://vuln.go.dev` | Public Go vulnerability database merged into `/vulndb` and used to flag vulnerable dependencies. Empty, or `-offline`, turns it off |
 | `-v` | `false` | Debug logging |
 
@@ -82,6 +83,25 @@ The server checks everything again:
 Re-uploading identical content is a no-op, so CI retries are safe. Different content for an existing version gets `409`.
 
 For CI, prefer **trusted publishing** (next section): nothing secret to store. Or skip `login` and set `GOPHERDEX_REGISTRY` and `GOPHERDEX_TOKEN` from a CI secret.
+
+## Documentation, source and dependencies
+
+Project pages document every package from the published zip, using `go/doc` and `go/doc/comment`, the same packages pkg.go.dev uses.
+
+**Docs tab**
+- **Contents:** the package overview, then constants, variables, functions, types, and methods, each with a source link (`retry.go:42`).
+- **Doc comments:** headings, lists and code blocks render properly. `[Name]` and `[pkg.Name]` references become links: to anchors in the same module, to other modules hosted here, or to pkg.go.dev.
+- **Deprecated symbols:** anything with a `Deprecated:` paragraph is marked.
+- **Examples:** examples from `_test.go` files show with their expected output. Self-contained ones get a **Run in the Go Playground** button (`-playground`, off with `-offline`).
+- **Finding things:** an index and a filter box ("Jump to a function, type or constant…") at the top.
+
+**Source tab.** Every file in the version's zip, with line anchors (`?tab=source&file=retry.go#L42`). It's exactly what the go command downloads and verifies, not a link to a repository that may have changed.
+
+**Dependencies tab**
+- **Requires:** the version's requirements from go.mod, direct and indirect. Hosted modules link to their pages, others to pkg.go.dev.
+- **Used by:** every module on the registry whose latest release requires this one. Dependents stuck on a version with a security advisory are flagged.
+- **Sidebar:** shows the "Used by" count.
+- **Older versions:** requirements of versions published earlier are indexed at start-up.
 
 ## Security advisories
 

@@ -157,6 +157,7 @@ func run() error {
 	trusted := flag.Bool("trusted-publishing", true, "let GitHub Actions workflows publish with OIDC ID tokens instead of API tokens (off with -offline)")
 	oidcAudience := flag.String("oidc-audience", "", "audience GitHub ID tokens must be requested for (default: the module host)")
 	vulnDB := flag.String("vulndb", vulndb.DefaultUpstream, "public Go vulnerability database merged into /vulndb and used to flag vulnerable dependencies; empty turns it off (off with -offline)")
+	playground := flag.String("playground", "https://play.golang.org", "Go Playground that documentation examples open in; empty hides the Run buttons (off with -offline)")
 	verbose := flag.Bool("v", false, "log debug messages")
 	flag.Parse()
 	if err := flagsFromEnv(flag.CommandLine, os.Getenv); err != nil {
@@ -234,6 +235,9 @@ func run() error {
 	}
 
 	go func() {
+		if err := reg.BackfillRequires(ctx); err != nil && ctx.Err() == nil {
+			log.Error("backfill requirements", "err", err)
+		}
 		if err := reg.Backfill(ctx); err != nil && ctx.Err() == nil {
 			log.Error("backfill search index", "err", err)
 		}
@@ -296,6 +300,7 @@ func run() error {
 		Admins:        splitList(*admins),
 		GitHubOIDC:    githubOIDC,
 		VulnDB:        vulnUpstream,
+		PlaygroundURL: map[bool]string{true: "", false: *playground}[*offline],
 	})
 	if err != nil {
 		return err

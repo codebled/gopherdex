@@ -353,3 +353,25 @@
 
   render(readState(), false);
 })();
+
+// Symbol filter on the documentation tab: typing narrows each package's
+// index; Enter jumps to the first match.
+(() => {
+  const input = document.querySelector("[data-sym-filter]");
+  if (!input) return;
+  const items = [...document.querySelectorAll("[data-sym-list] li")];
+  const matches = () => items.filter((li) => !li.hidden);
+  input.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    for (const li of items) li.hidden = q !== "" && !li.textContent.toLowerCase().includes(q);
+    for (const d of document.querySelectorAll(".sym-index")) if (q) d.open = true;
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const first = matches()[0];
+    if (first) {
+      e.preventDefault();
+      first.querySelector("a").click();
+    }
+  });
+})();

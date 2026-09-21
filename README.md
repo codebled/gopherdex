@@ -10,7 +10,7 @@ A package registry for Go modules, in the spirit of pypi.org.
 - **Discovery:** full-text search with filters (license, Go version, last release, deprecated) and sorting (relevance, downloads, recently updated, newest), download counts and charts, and a home page with just-updated, most-downloaded and new modules. Public pkg.go.dev results follow in their own section.
 - **Public modules:** modules that aren't hosted here come from `proxy.golang.org`, with search and docs from `pkg.go.dev`. Run with `-offline` to turn this off.
 
-Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done) → documentation and dependency graph (done).
+Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done) → documentation and dependency graph (done) → badges and public JSON API (done) → publish-time safety checks (done).
 
 ## Run it
 
@@ -49,6 +49,7 @@ Open http://localhost:8080 and choose **Register**. Without `-smtp-addr`, emails
 | `-backup-dir` / `-backup-every` / `-backup-keep` | (off) / `24h` / `7` | Automatic database backups |
 | `-trusted-publishing` | `true` | Let GitHub Actions workflows publish with OIDC ID tokens. Off with `-offline`, because it fetches GitHub's signing keys |
 | `-oidc-audience` | module host | Audience GitHub ID tokens must be requested for |
+| `-publish-checks` | `true` | Scan uploads before publishing (see **Trust and safety**) |
 | `-playground` | `https://play.golang.org` | Go Playground that documentation examples open in. Empty, or `-offline`, hides the Run buttons |
 | `-vulndb` | `https://vuln.go.dev` | Public Go vulnerability database merged into `/vulndb` and used to flag vulnerable dependencies. Empty, or `-offline`, turns it off |
 | `-v` | `false` | Debug logging |
@@ -102,6 +103,34 @@ Project pages document every package from the published zip, using `go/doc` and 
 - **Used by:** every module on the registry whose latest release requires this one. Dependents stuck on a version with a security advisory are flagged.
 - **Sidebar:** shows the "Used by" count.
 - **Older versions:** requirements of versions published earlier are indexed at start-up.
+
+## Badges and the public API
+
+**README badges.** Every module has SVG badges at `/badge/<owner>/<module>.svg` (`/badge/<owner>/<module>/v2.svg` for major versions), drawn in Go brand colors:
+
+| `?type=` | Shows |
+|---|---|
+| `version` (default) | The latest version `go get` installs |
+| `downloads` | Downloads in the last 30 days, e.g. `1.2k/month` |
+| `verified` | Whether the latest version came from a trusted publisher |
+| `security` | Advisories affecting the latest version |
+
+`&label=` changes the left side. The project page's sidebar has a copy-ready Markdown snippet.
+
+**JSON API.** Documented at `/api`.
+- **Access:** version 1 is read-only. It needs no token and allows any website (CORS).
+- **Stability:** fields may be added, but never renamed or removed.
+- **Endpoints:**
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/modules/{module}` | Latest version, synopsis, licenses, owners, every version (yanked, retracted, verified), downloads, "used by", advisories, links |
+| `GET /api/v1/modules/{module}/@v/{version}` | Requirements, packages, checksums, size, provenance, advisories affecting it, download links |
+| `GET /api/v1/search?q=&sort=&page=&per_page=` | Hosted modules matching `q` |
+| `GET /api/v1/owners/{name}` | A user's or organization's modules |
+| `GET /api/v1/stats` | Registry totals and where its GOPROXY and vulnerability database live |
+
+`{module}` can be the full path or `owner/name`. The older `/api/search` and `/api/modules/…` endpoints behind the search page are internal and may change.
 
 ## Security advisories
 
@@ -274,6 +303,7 @@ Organizations and users share one namespace list, so a name can't be both.
 | **Review queue** | Admins (`-admins`, with two-factor on) see open reports at `/admin`. They can dismiss a report or quarantine the module. |
 | **Quarantine** | A quarantined module is hidden from its page (410), search, listings, the proxy and `go get`, and can't receive new versions. Its files are kept, releasing it restores everything, and its maintainers are emailed. |
 | **Trusted publishing** | GitHub Actions publishes without stored tokens; each release records the verified run. See **Trusted publishing** above. |
+| **Publish checks** | Every upload is scanned before it's stored (`internal/scan`). Compiled programs (ELF, Mach-O, PE) outside `testdata/` are refused. Warned and sent to the admin queue as an automated report: code that runs as soon as the package is imported (an `init()` or package-level variable calling `os/exec`, `net/http`, `net.Dial`, `plugin.Open`, `syscall.Exec`… found through import aliases), string literals of 16 KB or more that look like base64 or hex, WebAssembly and `testdata` binaries, and a new module whose `owner/name` is one typo from a popular module here or a well-known GitHub module, or copies one outright. The CLI prints the warnings, maintainers see them on the Manage tab, and maintainers and admins are emailed. |
 | **Rate limits** | Sign-in (including 2FA codes), sign-up, password resets, verification emails, uploads, reports, search pages and the JSON API are all limited. The GOPROXY endpoints aren't, because the go command and the public mirror fetch many files at once. |
 
 ## Backups

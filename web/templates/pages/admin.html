@@ -20,7 +20,7 @@
           <div class="report-head">
             <span class="pill {{if eq .Category "malware"}}p-retracted{{else}}p-pre{{end}}">{{.Category}}</span>
             <code>{{.Module}}</code>
-            <span class="muted">reported by @{{.Reporter}} · {{since .CreatedAt}}</span>
+            <span class="muted">{{with .Reporter}}reported by @{{.}}{{else}}flagged by the automated publish checks{{end}} · {{since .CreatedAt}}</span>
           </div>
           <p class="report-details">{{.Details}}</p>
           <div class="report-actions">

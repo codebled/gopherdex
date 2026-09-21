@@ -1,0 +1,109 @@
+{{define "content"}}{{with .Data}}
+<section class="account api-docs">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker">For tools and bots</p>
+        <h1>API</h1>
+        <p class="muted">Everything public on this registry, as JSON. No token needed, and any website can call it (CORS).</p>
+      </div>
+    </div>
+
+    <section class="panel" aria-labelledby="basics-title">
+      <div class="panel-head"><h2 id="basics-title">Basics</h2><p>Version 1</p></div>
+      <div class="panel-body">
+        <ul class="api-points">
+          <li>Base URL: <code>{{.SiteURL}}/api/v1</code>. Every endpoint is a <code>GET</code> and returns JSON.</li>
+          <li><strong>Stable.</strong> Version 1 only grows: new fields may appear, but existing ones are never renamed or removed. Anything incompatible would come as <code>/api/v2</code>.</li>
+          <li>Module paths can be written in full (<code>{{.ModuleHost}}/alice/retry</code>) or without the host (<code>alice/retry</code>).</li>
+          <li>Errors are <code>{"error": "…"}</code> with a 4xx status. Requests are rate limited per IP; slow down on <code>429</code>.</li>
+          <li>Responses may be cached for up to a minute.</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="api-list">
+      <section class="panel" id="module">
+        <div class="panel-head"><h2><code>/modules/{module}</code></h2></div>
+        <div class="panel-body">
+          <p>A module: latest version, synopsis, licenses, owners, every version (with yanked, retracted and verified flags), downloads, how many modules use it, security advisories, and links.</p>
+          <div class="cmd"><code>curl {{.SiteURL}}/api/v1/modules/alice/retry</code><button type="button" data-copy="curl {{.SiteURL}}/api/v1/modules/alice/retry">Copy</button></div>
+<pre class="api-sample">{
+  "path": "{{.ModuleHost}}/alice/retry",
+  "latest": "v1.2.0",
+  "synopsis": "Package retry retries operations.",
+  "licenses": ["MIT"],
+  "owners": ["alice"],
+  "versions": [{"version": "v1.2.0", "publishedAt": "2026-09-21T10:00:00Z", "yanked": false, "verified": true, …}],
+  "downloads": {"lastDay": 12, "lastWeek": 80, "lastMonth": 311, "total": 1204},
+  "usedBy": 4,
+  "advisories": [],
+  "urls": {"project": "…", "docs": "…", "proxy": "{{.SiteURL}}/api/proxy", "badge": "…"}
+}</pre>
+        </div>
+      </section>
+
+      <section class="panel" id="version">
+        <div class="panel-head"><h2><code>/modules/{module}/@v/{version}</code></h2></div>
+        <div class="panel-body">
+          <p>One version: requirements from go.mod, packages, licenses, file count and size, the <code>h1:</code> checksums and SHA-256, the verified GitHub Actions provenance when a trusted publisher uploaded it, the advisories that affect it, and download links.</p>
+          <div class="cmd"><code>curl {{.SiteURL}}/api/v1/modules/alice/retry/@v/v1.2.0</code><button type="button" data-copy="curl {{.SiteURL}}/api/v1/modules/alice/retry/@v/v1.2.0">Copy</button></div>
+        </div>
+      </section>
+
+      <section class="panel" id="search">
+        <div class="panel-head"><h2><code>/search?q=</code></h2></div>
+        <div class="panel-body">
+          <p>Search the modules hosted here. Parameters: <code>q</code>, <code>sort</code> (<code>relevance</code>, <code>downloads</code>, <code>updated</code>, <code>new</code>), <code>page</code>, <code>per_page</code> (up to 100).</p>
+          <div class="cmd"><code>curl '{{.SiteURL}}/api/v1/search?q=retry&amp;sort=downloads'</code><button type="button" data-copy="curl '{{.SiteURL}}/api/v1/search?q=retry&amp;sort=downloads'">Copy</button></div>
+        </div>
+      </section>
+
+      <section class="panel" id="owners">
+        <div class="panel-head"><h2><code>/owners/{name}</code></h2></div>
+        <div class="panel-body">
+          <p>A user's or organization's modules.</p>
+          <div class="cmd"><code>curl {{.SiteURL}}/api/v1/owners/alice</code><button type="button" data-copy="curl {{.SiteURL}}/api/v1/owners/alice">Copy</button></div>
+        </div>
+      </section>
+
+      <section class="panel" id="stats">
+        <div class="panel-head"><h2><code>/stats</code></h2></div>
+        <div class="panel-body">
+          <p>Registry totals, plus where its GOPROXY and vulnerability database live.</p>
+          <div class="cmd"><code>curl {{.SiteURL}}/api/v1/stats</code><button type="button" data-copy="curl {{.SiteURL}}/api/v1/stats">Copy</button></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" id="badges" aria-labelledby="badges-title">
+      <div class="panel-head"><h2 id="badges-title">README badges</h2><p>SVG, refreshed every 5 minutes</p></div>
+      <div class="panel-body">
+        <p><code>{{.SiteURL}}/badge/{owner}/{module}.svg</code> (add <code>/v2</code> before <code>.svg</code> for major versions), with <code>?type=</code>:</p>
+        <table class="tokens api-badges">
+          <thead><tr><th scope="col">type</th><th scope="col">Shows</th></tr></thead>
+          <tbody>
+            <tr><td><code>version</code> (default)</td><td>The latest version <code>go get</code> installs</td></tr>
+            <tr><td><code>downloads</code></td><td>Downloads in the last 30 days</td></tr>
+            <tr><td><code>verified</code></td><td>Whether the latest version was published by a trusted publisher</td></tr>
+            <tr><td><code>security</code></td><td>Advisories affecting the latest version</td></tr>
+          </tbody>
+        </table>
+        <p>Change the left text with <code>&amp;label=</code>. Each project page has a copy-ready snippet for its README.</p>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="more-title">
+      <div class="panel-head"><h2 id="more-title">Also machine-readable</h2></div>
+      <div class="panel-body">
+        <ul class="api-points">
+          <li><code>{{.SiteURL}}/api/proxy</code>: the GOPROXY protocol, for the go command.</li>
+          <li><code>{{.SiteURL}}/vulndb</code>: the Go vulnerability database format, for <code>govulncheck -db</code>.</li>
+          <li><a href="/feeds/releases.atom">Atom feeds</a> of releases, new modules, owners, modules and <a href="/feeds/advisories.atom">advisories</a>.</li>
+          <li><a href="/sitemap.xml">sitemap.xml</a> of every project page.</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+</section>
+{{end}}{{end}}

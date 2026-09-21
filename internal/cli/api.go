@@ -38,6 +38,11 @@ type publishResponse struct {
 	URL              string    `json:"url"`
 	ProxyURL         string    `json:"proxyURL"`
 	Install          string    `json:"install"`
+	Warnings         []struct {
+		File    string `json:"file"`
+		Line    int    `json:"line"`
+		Message string `json:"message"`
+	} `json:"warnings"`
 }
 
 // apiError is an error response from the registry.

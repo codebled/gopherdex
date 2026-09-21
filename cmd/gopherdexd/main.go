@@ -158,6 +158,7 @@ func run() error {
 	oidcAudience := flag.String("oidc-audience", "", "audience GitHub ID tokens must be requested for (default: the module host)")
 	vulnDB := flag.String("vulndb", vulndb.DefaultUpstream, "public Go vulnerability database merged into /vulndb and used to flag vulnerable dependencies; empty turns it off (off with -offline)")
 	playground := flag.String("playground", "https://play.golang.org", "Go Playground that documentation examples open in; empty hides the Run buttons (off with -offline)")
+	publishChecks := flag.Bool("publish-checks", true, "scan uploads before publishing: refuse compiled programs, and send code that runs on import, encoded blobs and look-alike names for review")
 	verbose := flag.Bool("v", false, "log debug messages")
 	flag.Parse()
 	if err := flagsFromEnv(flag.CommandLine, os.Getenv); err != nil {
@@ -212,7 +213,7 @@ func run() error {
 			return err
 		}
 	}
-	reg := &registry.Registry{DB: db, Blobs: blobs, ModuleHost: *moduleHost, MaxZipSize: *maxUpload, Log: log, Require2FA: *require2FA}
+	reg := &registry.Registry{DB: db, Blobs: blobs, ModuleHost: *moduleHost, MaxZipSize: *maxUpload, Log: log, Require2FA: *require2FA, SkipChecks: !*publishChecks}
 
 	if *backupDir != "" {
 		go func() {

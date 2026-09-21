@@ -38,54 +38,109 @@ var Brand = []Color{
 	{"white", "#FFFFFF"},
 }
 
-// Semantic tokens are what CSS uses. Every token points at a Brand color, so
-// the page cannot drift outside the palette.
+// Tints are official colors mixed with white, for quiet surfaces and
+// borders: a light slate reads as neutral grey, and a pale blue as a
+// selected row. Each is exactly Percent of Brand over white, so the page
+// still uses nothing but the Go palette.
+type Tint struct {
+	Name    string
+	Brand   string
+	Percent int
+}
+
+var Tints = []Tint{
+	{"slate-50", "slate", 3},      // code blocks, sidebars
+	{"slate-100", "slate", 10},    // hover
+	{"slate-200", "slate", 18},    // borders
+	{"slate-300", "slate", 34},    // input borders, strong lines
+	{"blue-50", "gopher-blue", 5}, // selected, info
+	{"blue-100", "gopher-blue", 18},
+	{"aqua-50", "aqua", 10},      // success notices
+	{"fuchsia-50", "fuchsia", 5}, // danger notices
+	{"yellow-100", "yellow", 30}, // highlights
+}
+
+// Semantic tokens are what CSS uses. Every token points at a Brand color
+// or a Tint, so the page cannot drift outside the palette.
 //
-// Gopher Blue and Light Blue are too light for text on white; they are used
-// for fills and lines, with black text on top. Blue text uses Dark Blue.
+// The theme is quiet: black text on white, slate for secondary text and
+// lines, and blue only where it means something (links, the primary
+// action, focus, the logo). Gopher Blue is too light for text on white,
+// so text and buttons use Dark Blue.
 var Semantic = []Token{
 	{"bg", "white"},
 	{"surface", "white"},
+	{"surface-muted", "slate-50"},
+	{"hover", "slate-100"},
 	{"text", "black"},
 	{"text-muted", "slate"},
-	{"line", "light-blue"},
-	{"primary", "gopher-blue"},
-	{"on-primary", "black"},
+	{"line", "slate-200"},
+	{"line-strong", "slate-300"},
+	{"primary", "dark-blue"},
+	{"on-primary", "white"},
+	{"primary-hover", "black"},
+	{"accent", "gopher-blue"},
+	{"accent-soft", "blue-50"},
+	{"accent-line", "blue-100"},
 	{"link", "dark-blue"},
-	{"focus", "dark-blue"},
+	{"focus", "gopher-blue"},
 	{"success", "aqua"},
 	{"on-success", "black"},
-	{"highlight", "yellow"},
+	{"success-soft", "aqua-50"},
+	{"highlight", "yellow-100"},
 	{"on-highlight", "black"},
 	{"danger", "fuchsia"},
 	{"on-danger", "white"},
-	{"code-bg", "black"},
-	{"code-text", "white"},
-	{"code-accent", "light-blue"},
-	{"code-prompt", "gopher-blue"},
-	{"code-ok", "aqua"},
-	{"code-string", "yellow"},
+	{"danger-soft", "fuchsia-50"},
+	{"code-bg", "slate-50"},
+	{"code-text", "black"},
+	{"code-accent", "slate"},
+	{"code-prompt", "dark-blue"},
+	{"code-ok", "dark-blue"},
+	{"code-string", "fuchsia"},
 }
 
 // TextPairs are foreground/background tokens used together for text. Tests
 // require each to reach WCAG AA (4.5:1).
 var TextPairs = [][2]string{
 	{"text", "bg"}, {"text-muted", "bg"}, {"link", "bg"}, {"danger", "bg"},
-	{"on-primary", "primary"}, {"on-success", "success"},
+	{"text", "surface-muted"}, {"text-muted", "surface-muted"}, {"link", "surface-muted"},
+	{"text", "hover"}, {"text", "accent-soft"}, {"link", "accent-soft"},
+	{"on-primary", "primary"}, {"on-primary", "primary-hover"}, {"on-success", "success"},
 	{"on-highlight", "highlight"}, {"on-danger", "danger"},
+	{"text", "success-soft"}, {"text", "danger-soft"}, {"danger", "danger-soft"},
 	{"text", "line"},
 	{"code-text", "code-bg"}, {"code-accent", "code-bg"}, {"code-prompt", "code-bg"},
 	{"code-ok", "code-bg"}, {"code-string", "code-bg"},
 }
 
-// Hex returns the value of a brand color.
-func Hex(brand string) (string, bool) {
+// Hex returns the value of a brand color or tint.
+func Hex(name string) (string, bool) {
 	for _, c := range Brand {
-		if c.Name == brand {
+		if c.Name == name {
 			return c.Hex, true
 		}
 	}
+	for _, t := range Tints {
+		if t.Name == name {
+			base, ok := Hex(t.Brand)
+			if !ok {
+				return "", false
+			}
+			return mix(base, t.Percent), true
+		}
+	}
 	return "", false
+}
+
+// mix returns percent of hex over white, as "#RRGGBB".
+func mix(hex string, percent int) string {
+	n, _ := strconv.ParseUint(strings.TrimPrefix(hex, "#"), 16, 32)
+	ch := func(shift uint) int {
+		c := float64((n >> shift) & 0xFF)
+		return int(math.Round(c*float64(percent)/100 + 255*float64(100-percent)/100))
+	}
+	return fmt.Sprintf("#%02X%02X%02X", ch(16), ch(8), ch(0))
 }
 
 // Lookup returns the value of a semantic token.
@@ -104,6 +159,10 @@ func CSS() string {
 	b.WriteString("/* Generated from internal/tokens. Do not edit. */\n:root {\n  color-scheme: light;\n")
 	for _, c := range Brand {
 		fmt.Fprintf(&b, "  --go-%s: %s;\n", c.Name, c.Hex)
+	}
+	for _, t := range Tints {
+		h, _ := Hex(t.Name)
+		fmt.Fprintf(&b, "  --go-%s: %s; /* %d%% %s */\n", t.Name, h, t.Percent, t.Brand)
 	}
 	for _, t := range Semantic {
 		fmt.Fprintf(&b, "  --%s: var(--go-%s);\n", t.Name, t.Color)

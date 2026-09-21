@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,7 +9,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
+	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
 	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
 )
 
@@ -127,6 +131,9 @@ func (s *server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusOK
 	} else {
 		s.notifyPublished(pub.Module, pub.Version, u, tok, up.Client.IP)
+		if len(pub.Warnings) > 0 {
+			s.notifyFindings(pub)
+		}
 		if s.mirror != nil {
 			s.mirror.Notify(pub.Module, pub.Version)
 		}
@@ -151,4 +158,37 @@ func (s *server) uploadReadError(w http.ResponseWriter, r *http.Request, err err
 	}
 	s.log.Warn("read upload", "err", err)
 	writeJSON(w, http.StatusBadRequest, apiError{"The upload was interrupted or malformed. Try again."})
+}
+
+// notifyFindings tells maintainers and administrators what the publish
+// checks flagged. Maintainers always get it: it's about their code.
+func (s *server) notifyFindings(pub *registry.Published) {
+	var lines []string
+	for _, f := range pub.Warnings {
+		lines = append(lines, "  - "+f.String())
+	}
+	list := strings.Join(lines, "\n")
+	page := s.siteURL + s.project.URL(pub.Module, "") + "?tab=manage"
+	s.emailMaintainers(pub.Module, fmt.Sprintf("Publish checks flagged %s %s", pub.Module, pub.Version),
+		fmt.Sprintf("%s@%s is published, but the registry's automated checks flagged it for review:\n\n%s\n\nAn administrator will look at it. If this is expected, there's nothing to do. Details: %s", pub.Module, pub.Version, list, page))
+	var admins []string
+	for name := range s.admins {
+		admins = append(admins, name)
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		emails, err := s.accounts.UserEmails(ctx, admins)
+		if err != nil {
+			s.log.Error("email admins", "err", err)
+			return
+		}
+		for name, email := range emails {
+			msg := mail.Message{To: email, Subject: "Review queue: " + pub.Module + " " + pub.Version,
+				Body: "Hi " + name + ",\n\nThe publish checks flagged " + pub.Module + "@" + pub.Version + ":\n\n" + list + "\n\nReview it at " + s.siteURL + "/admin\n"}
+			if err := s.accounts.Mailer.Send(ctx, msg); err != nil {
+				s.log.Error("email admin", "user", name, "err", err)
+			}
+		}
+	}()
 }

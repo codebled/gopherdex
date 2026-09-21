@@ -12,6 +12,7 @@ import (
 	"github.com/parthiban-sivakumar/gopherdex/internal/module"
 	"github.com/parthiban-sivakumar/gopherdex/internal/project"
 	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/parthiban-sivakumar/gopherdex/internal/scan"
 )
 
 // goImportPage answers the go command's ?go-get=1 lookup. The "mod" form
@@ -141,7 +142,8 @@ type projectData struct {
 	Dependents   []dependentRow // deps tab
 	Source       *project.SourceFile
 	SourcePath   string
-	Playground   bool // examples can be opened in the Go Playground
+	Playground   bool                      // examples can be opened in the Go Playground
+	Findings     map[string][]scan.Finding // manage tab: what publish checks flagged, by version
 }
 
 // dependentRow is a module that uses the one shown, and whether the
@@ -203,6 +205,12 @@ func (s *server) renderProjectFull(w http.ResponseWriter, r *http.Request, modPa
 		return
 	}
 	data.Chart = buildChart(data.Downloads.Daily)
+	if tab == "manage" {
+		if data.Findings, err = s.registry.VersionFindings(r.Context(), modPath); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	if tab == "manage" && data.IsOwner {
 		if data.Publishers, err = s.registry.Publishers(r.Context(), modPath); err != nil {
 			s.serverError(w, r, err)

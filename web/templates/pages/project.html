@@ -121,6 +121,13 @@
           </ul>
         </section>
 
+        <section class="side-block" aria-labelledby="badge-title">
+          <h2 id="badge-title">README badge</h2>
+          <img class="badge-preview" src="/badge{{.URL}}.svg" alt="{{.Path}} on Gopherdex" height="20">
+          <div class="cmd badge-cmd"><code>[![{{.Name}}]({{.SiteURL}}/badge{{.URL}}.svg)]({{.SiteURL}}{{.URL}})</code><button type="button" data-copy="[![{{.Name}}]({{.SiteURL}}/badge{{.URL}}.svg)]({{.SiteURL}}{{.URL}})">Copy</button></div>
+          <p class="muted small">Downloads, verified-source and security badges: <a href="/api#badges">see all</a>.</p>
+        </section>
+
         {{if .MajorVersions}}
         <section class="side-block" aria-labelledby="majors-title">
           <h2 id="majors-title">Major versions</h2>
@@ -392,6 +399,23 @@
               </table>
             </div>
           </section>
+
+          {{if .Findings}}
+          <section class="manage-block" aria-labelledby="checks-title">
+            <h3 id="checks-title">Publish checks</h3>
+            <p class="muted">Every upload is scanned for compiled programs, code that runs as soon as the package is imported, large encoded strings and names close to other modules. These releases were published but flagged for the registry's administrators to review; nothing is hidden unless they act.</p>
+            <ul class="advisory-list">
+              {{range $v, $fs := .Findings}}
+              {{range $fs}}
+              <li>
+                <div class="adv-head"><a class="adv-id" href="{{$.Data.URL}}@{{$v}}">{{$v}}</a> <span class="pill p-pre">{{.Rule}}</span>{{if .File}} <a href="{{$.Data.URL}}@{{$v}}?tab=source&amp;file={{.File}}{{if .Line}}#L{{.Line}}{{end}}"><code>{{.File}}{{if .Line}}:{{.Line}}{{end}}</code></a>{{end}}</div>
+                <p>{{.Message}}</p>
+              </li>
+              {{end}}
+              {{end}}
+            </ul>
+          </section>
+          {{end}}
 
           {{if .IsOwner}}
           <section class="manage-block" aria-labelledby="deprecate-title">

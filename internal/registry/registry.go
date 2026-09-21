@@ -35,6 +35,7 @@ import (
 	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
 	"github.com/parthiban-sivakumar/gopherdex/internal/blob"
 	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/parthiban-sivakumar/gopherdex/internal/scan"
 )
 
 // DefaultMaxZipSize caps uploads. The go command accepts up to 500 MiB, but
@@ -66,6 +67,8 @@ type Registry struct {
 	// Require2FA refuses uploads from accounts without two-factor
 	// authentication, as PyPI does.
 	Require2FA bool
+	// SkipChecks turns off the publish-time checks (package scan).
+	SkipChecks bool
 }
 
 func (r *Registry) now() time.Time {
@@ -106,6 +109,9 @@ type Published struct {
 	Size             int64     `json:"size"`
 	PublishedAt      time.Time `json:"publishedAt"`
 	AlreadyPublished bool      `json:"alreadyPublished"`
+	// Warnings are what the publish checks flagged; the version is
+	// published and administrators review them.
+	Warnings []scan.Finding `json:"warnings,omitempty"`
 }
 
 // Module names are lower-case so paths never need case escaping and can't
@@ -227,6 +233,13 @@ func (r *Registry) Publish(ctx context.Context, u Upload) (*Published, error) {
 		return nil, err
 	}
 
+	var findings []scan.Finding
+	if !r.SkipChecks {
+		if findings, err = r.runChecks(ctx, u, namespace); err != nil {
+			return nil, err
+		}
+	}
+
 	f, err := os.Open(u.ZipFile)
 	if err != nil {
 		return nil, fmt.Errorf("open upload: %w", err)
@@ -318,10 +331,13 @@ func (r *Registry) Publish(ctx context.Context, u Upload) (*Published, error) {
 	if err := r.reindex(ctx, moduleID); err != nil {
 		r.log().Error("reindex after publish", "module", u.Module, "err", err)
 	}
+	if err := r.recordFindings(ctx, moduleID, versionID, u.Module, u.Version, findings); err != nil {
+		r.log().Error("record publish findings", "module", u.Module, "version", u.Version, "err", err)
+	}
 	r.log().Info("module published", "module", u.Module, "version", u.Version, "user", u.User.Username, "h1", h1)
 	return &Published{
 		Module: u.Module, Version: u.Version, H1: h1, GoModH1: goModH1,
-		SHA256: sha, Size: st.Size(), PublishedAt: now.UTC().Truncate(time.Second),
+		SHA256: sha, Size: st.Size(), PublishedAt: now.UTC().Truncate(time.Second), Warnings: findings,
 	}, nil
 }
 

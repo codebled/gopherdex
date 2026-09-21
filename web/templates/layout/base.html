@@ -13,7 +13,7 @@
   {{with .Feed}}<link rel="alternate" type="application/atom+xml" title="{{.Title}}" href="{{.URL}}">{{end}}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/tokens.css">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/app.js" defer></script>
@@ -23,10 +23,12 @@
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="/">{{template "mark"}}Gopherdex</a>
+    <a class="brand" href="/" aria-label="Gopherdex home">{{template "mark"}}<span>gopherdex</span></a>
     <nav class="nav-links" aria-label="Main">
-      <a href="/search">Browse modules</a>
+      <a href="/search">Browse</a>
       <a href="/#publish">Publish</a>
+      <a href="/advisories">Advisories</a>
+      <a href="/api">API</a>
     </nav>
     <div class="nav-account">
       {{with .User}}
@@ -46,11 +48,12 @@
 
 <footer>
   <div class="wrap foot">
-    <span class="foot-brand">{{template "mark"}}Gopherdex · a package registry for Go modules</span>
+    <span class="foot-brand">{{template "mark"}}gopherdex · the Go module registry</span>
     <nav aria-label="Footer">
       <a href="/search">Browse modules</a>
       <a href="/#publish">Publish</a>
       <a href="/advisories">Security advisories</a>
+      <a href="/api">API</a>
       <a href="/healthz">Status</a>
     </nav>
   </div>
@@ -62,12 +65,11 @@
 {{- end}}
 
 {{define "mark" -}}
-<svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
-  <rect class="m-bg" width="64" height="64" rx="14"/>
-  <rect class="m-bar" x="8" y="36" width="9" height="14" rx="2"/>
-  <rect class="m-bar" x="21" y="28" width="9" height="22" rx="2"/>
-  <rect class="m-bar" x="34" y="20" width="9" height="30" rx="2"/>
-  <rect class="m-new" x="47" y="12" width="9" height="38" rx="2"/>
+<svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+  <path class="m-top" d="M16 2.5 28.5 9.5 16 16.5 3.5 9.5Z"/>
+  <path class="m-left" d="M3.5 9.5 16 16.5V30L3.5 23Z"/>
+  <path class="m-right" d="M28.5 9.5 16 16.5V30L28.5 23Z"/>
+  <path class="m-tape" d="M9.75 6 22.25 13"/>
 </svg>
 {{- end}}
 

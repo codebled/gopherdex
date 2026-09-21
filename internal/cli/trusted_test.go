@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -91,4 +92,28 @@ func TestTrustedPublish(t *testing.T) {
 		t.Fatalf("publish without id-token permission: exit %d", code)
 	}
 	mustContain(t, stderr, "id-token: write")
+}
+
+// TestPublishWarnings shows the registry's publish-check warnings.
+func TestPublishWarnings(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	srv, token := startRegistry(t)
+	mod := moduleHost + "/alice/retry"
+	repo := gitRepo(t, mod)
+	if err := os.WriteFile(filepath.Join(repo, "init.go"), []byte("package retry\n\nimport \"os/exec\"\n\nfunc init() { exec.Command(\"id\").Run() }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", ".")
+	gitRun(t, repo, "commit", "-q", "-m", "init")
+	gitRun(t, repo, "tag", "v1.0.0")
+	r := &runner{t: t, env: map[string]string{"GOPHERDEX_CONFIG": filepath.Join(t.TempDir(), "c.json"), "GOPHERDEX_REGISTRY": srv.URL, "GOPHERDEX_TOKEN": token}, dir: repo, client: srv.Client()}
+	code, stdout, stderr := r.run("", "publish")
+	if code != 0 {
+		t.Fatalf("publish: %d %s", code, stderr)
+	}
+	mustContain(t, stdout, "Published "+mod+"@v1.0.0")
+	mustContain(t, stdout, "flagged 1 thing(s)")
+	mustContain(t, stdout, "warning  init() calls os/exec.Command, which starts a process as soon as a program imports the package. (init.go:5)")
 }

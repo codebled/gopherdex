@@ -205,6 +205,19 @@ func publish(ctx context.Context, args []string, env Env) error {
 		install = "GOPROXY=" + resp.ProxyURL + " go get " + modPath + "@" + version
 	}
 	fmt.Fprintf(out, "  install  %s\n", install)
+	if len(resp.Warnings) > 0 {
+		fmt.Fprintf(out, "\nThe registry's publish checks flagged %d thing(s) for its administrators to review:\n", len(resp.Warnings))
+		for _, w := range resp.Warnings {
+			loc := w.File
+			if w.Line > 0 {
+				loc = fmt.Sprintf("%s:%d", w.File, w.Line)
+			}
+			if loc != "" {
+				loc = " (" + loc + ")"
+			}
+			fmt.Fprintf(out, "  warning  %s%s\n", w.Message, loc)
+		}
+	}
 	return nil
 }
 

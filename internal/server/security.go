@@ -116,6 +116,15 @@ func (s *server) handleReset(w http.ResponseWriter, r *http.Request) {
 
 type twoFactorData struct {
 	Next, Error string
+	App         bool // the account has an authenticator app
+	Passkeys    bool // the account has passkeys
+}
+
+// twoFactorMethods fills in which second factors the pending sign-in has.
+func (s *server) twoFactorMethods(r *http.Request, d *twoFactorData) {
+	if c, err := r.Cookie(challengeCookie); err == nil {
+		d.App, d.Passkeys, _ = s.accounts.ChallengeMethods(r.Context(), c.Value)
+	}
 }
 
 func (s *server) handleTwoFactorForm(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +132,9 @@ func (s *server) handleTwoFactorForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	s.render(w, r, http.StatusOK, "login_2fa", "Two-factor authentication", twoFactorData{Next: safeNext(r.URL.Query().Get("next"))})
+	data := twoFactorData{Next: safeNext(r.URL.Query().Get("next"))}
+	s.twoFactorMethods(r, &data)
+	s.render(w, r, http.StatusOK, "login_2fa", "Two-factor authentication", data)
 }
 
 func (s *server) handleTwoFactor(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +147,7 @@ func (s *server) handleTwoFactor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := twoFactorData{Next: safeNext(r.PostFormValue("next"))}
+	s.twoFactorMethods(r, &data)
 	cookie, err := r.Cookie(challengeCookie)
 	if err != nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -173,12 +185,16 @@ type securityData struct {
 	Notice, Error string
 	Errors        map[string]string
 	Require2FA    bool
+	Passkeys      []accounts.Passkey
+	AppEnabled    bool // an authenticator app is set up
 }
 
 var securityNotices = map[string]string{
-	"password": "Password changed. Other sessions were signed out.",
-	"sessions": "Signed out of every other session.",
-	"2fa-off":  "Two-factor authentication is off.",
+	"password":        "Password changed. Other sessions were signed out.",
+	"sessions":        "Signed out of every other session.",
+	"2fa-off":         "Two-factor authentication is off.",
+	"passkey-added":   "Passkey added. You can sign in with it now, and it counts as two-factor authentication.",
+	"passkey-removed": "Passkey removed.",
 }
 
 func (s *server) handleSecurity(w http.ResponseWriter, r *http.Request) {
@@ -194,12 +210,21 @@ func (s *server) renderSecurity(w http.ResponseWriter, r *http.Request, status i
 	u := s.currentUser(r)
 	data.User, data.Require2FA = u, s.registry.Require2FA
 	var err error
+	if data.AppEnabled, err = s.accounts.AppEnabled(ctx, u.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if data.Passkeys, err = s.accounts.Passkeys(ctx, u.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	if u.TwoFactor {
 		if data.CodesLeft, err = s.accounts.RecoveryCodesLeft(ctx, u.ID); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
-	} else if data.RecoveryCodes == nil {
+	}
+	if !data.AppEnabled && data.RecoveryCodes == nil {
 		if data.Setup, err = s.accounts.BeginTOTP(ctx, u); err != nil {
 			s.serverError(w, r, err)
 			return

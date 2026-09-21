@@ -13,8 +13,8 @@
 
     <div class="security-grid">
       <section class="panel" aria-labelledby="tfa-title">
-        <div class="panel-head"><h2 id="tfa-title">Two-factor authentication</h2>
-          {{if .User.TwoFactor}}<span class="pill p-latest">On</span>{{else}}<span class="pill p-pre">Off</span>{{end}}
+        <div class="panel-head"><h2 id="tfa-title">Authenticator app</h2>
+          {{if .AppEnabled}}<span class="pill p-latest">On</span>{{else}}<span class="pill p-pre">Off</span>{{end}}
         </div>
         <div class="panel-body">
           {{if .RecoveryCodes}}
@@ -24,8 +24,8 @@
 {{end}}</pre>
             <button class="btn btn-outline btn-sm" type="button" data-copy="{{range .RecoveryCodes}}{{.}} {{end}}">Copy all</button>
           </div>
-          {{else if .User.TwoFactor}}
-          <p>Signing in needs a code from your authenticator app. You have <strong>{{.CodesLeft}}</strong> unused recovery code{{if ne .CodesLeft 1}}s{{end}}.</p>
+          {{else if .AppEnabled}}
+          <p>Signing in with a password needs a code from your authenticator app{{if .Passkeys}} or a passkey{{end}}. You have <strong>{{.CodesLeft}}</strong> unused recovery code{{if ne .CodesLeft 1}}s{{end}}.</p>
           <form class="inline-form" action="/account/security/2fa/disable" method="post">
             <label class="visually-hidden" for="disable-code">Current code</label>
             <input id="disable-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Current code" required
@@ -34,7 +34,7 @@
           </form>
           {{with .Errors.disable}}<p class="field-error">{{.}}</p>{{end}}
           {{else}}
-          <p>Protect your account and your modules with a second step at sign-in.{{if .Require2FA}} <strong>This registry requires it to publish.</strong>{{end}}</p>
+          <p>{{if .Passkeys}}Your passkeys already protect your account. You can also add an authenticator app as a backup.{{else}}Protect your account and your modules with a second step at sign-in, or add a passkey instead.{{if .Require2FA}} <strong>This registry requires one of them to publish.</strong>{{end}}{{end}}</p>
           <ol class="tfa-steps">
             <li>Scan this code with an authenticator app (1Password, Google Authenticator, Authy…).
               <div class="qr"><img src="{{.QR}}" width="220" height="220" alt="QR code for adding Gopherdex to an authenticator app"></div>
@@ -51,6 +51,51 @@
             </li>
           </ol>
           {{end}}
+        </div>
+      </section>
+
+      <section class="panel passkeys-panel" aria-labelledby="pk-title">
+        <div class="panel-head"><h2 id="pk-title">Passkeys</h2>
+          {{if .Passkeys}}<span class="pill p-latest">{{len .Passkeys}} active</span>{{else}}<span class="pill p-pre">None</span>{{end}}
+        </div>
+        <div class="panel-body">
+          <p>Sign in with Touch ID, Face ID, Windows Hello or a security key. Passkeys can't be phished or leaked: they only work on this site, and there's nothing to type.{{if and (not .Passkeys) (not .AppEnabled)}} Adding one turns on two-factor authentication.{{end}}</p>
+          {{with .Errors.passkey}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+          {{if .Passkeys}}
+          <ul class="publisher-list">
+            {{range .Passkeys}}
+            <li>
+              <div>
+                <strong>{{.Name}}</strong>{{if .Synced}} <span class="pill p-version">Synced</span>{{end}}
+                <p class="muted small">Added {{.CreatedAt.Format "2 Jan 2006"}} · {{with .LastUsedAt}}last used {{since .}}{{else}}not used yet{{end}}</p>
+              </div>
+              <form class="inline-form" action="/account/passkeys/{{.ID}}/delete" method="post">
+                <label class="visually-hidden" for="pk-pw-{{.ID}}">Your password, to remove {{.Name}}</label>
+                <input id="pk-pw-{{.ID}}" name="password" type="password" required autocomplete="current-password" placeholder="Password">
+                <button class="btn btn-danger-outline btn-sm" type="submit">Remove</button>
+              </form>
+            </li>
+            {{end}}
+          </ul>
+          {{end}}
+          {{if .User.EmailVerified}}
+          <div class="passkey-add" data-passkey-register hidden>
+            <div class="field">
+              <label for="passkey-name">Name this passkey</label>
+              <input id="passkey-name" type="text" maxlength="60" placeholder="MacBook Touch ID, iPhone, YubiKey…" autocomplete="off">
+            </div>
+            <button class="btn btn-primary btn-sm" type="button">Add a passkey</button>
+          </div>
+          {{else}}
+          <p class="muted small">Verify your email address to add a passkey.</p>
+          {{end}}
+          <p class="muted small" data-passkey-unsupported hidden>This browser doesn't support passkeys. Try an up-to-date Chrome, Safari, Edge or Firefox.</p>
+          <p class="notice danger" data-passkey-error role="alert" hidden></p>
+          <div class="recovery-codes" data-passkey-codes hidden>
+            <p class="notice success" role="status"><strong>Passkey added.</strong> Save these recovery codes somewhere safe. Each works once if you lose your devices. You won't see them again.</p>
+            <pre></pre>
+            <a class="btn btn-primary btn-sm" href="/account/security?done=passkey-added">I've saved them</a>
+          </div>
         </div>
       </section>
 

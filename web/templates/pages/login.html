@@ -20,6 +20,11 @@
         <p class="field-help"><a href="/forgot-password">Forgot your password?</a></p>
       </div>
       <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      <div class="passkey-signin" data-passkey-login data-next="{{.Next}}" hidden>
+        <p class="or"><span>or</span></p>
+        <button class="btn btn-outline btn-block" type="button">Sign in with a passkey</button>
+        <p class="notice danger" data-passkey-error role="alert" hidden></p>
+      </div>
       <p class="form-foot">New to Gopherdex? <a href="/signup">Create an account</a></p>
     </form>
   </div>

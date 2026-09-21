@@ -248,8 +248,11 @@ type TOTPSetup struct {
 // BeginTOTP creates (or shows again) the secret for adding an authenticator
 // app. Two-factor login isn't on until ConfirmTOTP succeeds.
 func (s *Service) BeginTOTP(ctx context.Context, u *User) (*TOTPSetup, error) {
-	if u.TwoFactor {
-		return nil, errors.New("two-factor authentication is already on")
+	// Passkeys count as two-factor too; what matters here is the app.
+	if on, err := s.AppEnabled(ctx, u.ID); err != nil {
+		return nil, err
+	} else if on {
+		return nil, errors.New("an authenticator app is already set up")
 	}
 	var secret string
 	if err := s.DB.QueryRowContext(ctx, `SELECT totp_secret FROM users WHERE id = ?`, u.ID).Scan(&secret); err != nil {
@@ -329,7 +332,8 @@ func (s *Service) DisableTOTP(ctx context.Context, u *User, code string, c Clien
 	if _, err := tx.ExecContext(ctx, `UPDATE users SET totp_secret = '', totp_enabled_at = NULL, totp_last_step = 0 WHERE id = ?`, u.ID); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ?`, u.ID); err != nil {
+	// Recovery codes stay while passkeys remain; they recover those too.
+	if _, err := tx.ExecContext(ctx, `DELETE FROM recovery_codes WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM passkeys WHERE user_id = ?)`, u.ID, u.ID); err != nil {
 		return err
 	}
 	if err := audit(ctx, tx, u.ID, "2fa.disabled", "", c, now); err != nil {
@@ -360,9 +364,13 @@ func (s *Service) verifySecondFactor(ctx context.Context, userID int64, code str
 		return err
 	}
 	if !enabled.Valid {
-		return errors.New("two-factor authentication isn't on")
-	}
-	if step := matchTOTP(secret, code, s.now(), lastStep); step != 0 {
+		// Passkey-only accounts still have recovery codes.
+		if has, err := s.HasPasskeys(ctx, userID); err != nil {
+			return err
+		} else if !has {
+			return errors.New("two-factor authentication isn't on")
+		}
+	} else if step := matchTOTP(secret, code, s.now(), lastStep); step != 0 {
 		res, err := s.DB.ExecContext(ctx, `UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?`, step, userID, step)
 		if err != nil {
 			return err

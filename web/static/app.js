@@ -349,3 +349,116 @@
     }
   });
 })();
+
+// Passkeys: registration on the security page, sign-in on the login page,
+// and the second step after a password. Each is two requests: options
+// for navigator.credentials, then the browser's answer.
+(() => {
+  const blocks = document.querySelectorAll("[data-passkey-register], [data-passkey-login], [data-passkey-2fa]");
+  if (!blocks.length) return;
+  if (!window.PublicKeyCredential || !navigator.credentials) {
+    document.querySelectorAll("[data-passkey-unsupported]").forEach((el) => (el.hidden = false));
+    blocks.forEach((el) => { if (!el.matches("[data-passkey-2fa]")) el.hidden = true; });
+    return;
+  }
+
+  const fromB64 = (s) => {
+    const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4));
+    return Uint8Array.from(b, (c) => c.charCodeAt(0)).buffer;
+  };
+  const toB64 = (buf) =>
+    btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  function creationOptions(o) {
+    const pk = o.publicKey;
+    pk.challenge = fromB64(pk.challenge);
+    pk.user.id = fromB64(pk.user.id);
+    (pk.excludeCredentials || []).forEach((c) => (c.id = fromB64(c.id)));
+    return pk;
+  }
+  function requestOptions(o) {
+    const pk = o.publicKey;
+    pk.challenge = fromB64(pk.challenge);
+    (pk.allowCredentials || []).forEach((c) => (c.id = fromB64(c.id)));
+    return pk;
+  }
+  function credentialJSON(c) {
+    const r = c.response;
+    const response = { clientDataJSON: toB64(r.clientDataJSON) };
+    if (r.attestationObject) {
+      response.attestationObject = toB64(r.attestationObject);
+      if (r.getTransports) response.transports = r.getTransports();
+    } else {
+      response.authenticatorData = toB64(r.authenticatorData);
+      response.signature = toB64(r.signature);
+      if (r.userHandle) response.userHandle = toB64(r.userHandle);
+    }
+    return { id: c.id, rawId: toB64(c.rawId), type: c.type, response, clientExtensionResults: c.getClientExtensionResults() };
+  }
+
+  async function post(url, body) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Something went wrong. Try again.");
+    return data;
+  }
+
+  function friendly(err) {
+    if (err && (err.name === "NotAllowedError" || err.name === "AbortError")) return "The passkey request was cancelled or timed out.";
+    if (err && err.name === "InvalidStateError") return "This device already has a passkey for your account.";
+    return (err && err.message) || "The passkey didn't work. Try again.";
+  }
+
+  function wire(block, run) {
+    block.hidden = false;
+    const button = block.querySelector("button");
+    const error = block.querySelector("[data-passkey-error]") || document.querySelector("[data-passkey-error]");
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      if (error) error.hidden = true;
+      try {
+        await run(block);
+      } catch (err) {
+        if (error) {
+          error.textContent = friendly(err);
+          error.hidden = false;
+        }
+      } finally {
+        button.disabled = false;
+      }
+    });
+  }
+
+  const register = document.querySelector("[data-passkey-register]");
+  if (register) wire(register, async () => {
+    const name = document.getElementById("passkey-name").value.trim();
+    const options = await post("/account/passkeys/options");
+    const cred = await navigator.credentials.create({ publicKey: creationOptions(options) });
+    const result = await post(`/account/passkeys?name=${encodeURIComponent(name)}`, credentialJSON(cred));
+    if (result.recoveryCodes && result.recoveryCodes.length) {
+      const box = document.querySelector("[data-passkey-codes]");
+      box.querySelector("pre").textContent = result.recoveryCodes.join("\n");
+      box.hidden = false;
+      register.hidden = true;
+    } else {
+      location.href = "/account/security?done=passkey-added";
+    }
+  });
+
+  const signIn = (optionsURL, finishURL) => async (block) => {
+    const options = await post(optionsURL);
+    const cred = await navigator.credentials.get({ publicKey: requestOptions(options) });
+    const next = block.dataset.next ? `?next=${encodeURIComponent(block.dataset.next)}` : "";
+    const result = await post(finishURL + next, credentialJSON(cred));
+    location.href = result.redirect || "/account";
+  };
+  const login = document.querySelector("[data-passkey-login]");
+  if (login) wire(login, signIn("/login/passkey/options", "/login/passkey"));
+  const second = document.querySelector("[data-passkey-2fa]");
+  if (second) wire(second, signIn("/login/2fa/passkey/options", "/login/2fa/passkey"));
+})();

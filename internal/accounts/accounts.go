@@ -172,7 +172,7 @@ func (s *Service) Login(ctx context.Context, login, password string, c Client) (
 		twoFactor sql.NullInt64
 		createdAt int64
 	)
-	err := s.DB.QueryRowContext(ctx, `SELECT id, username, email, password_hash, email_verified_at, totp_enabled_at, created_at
+	err := s.DB.QueryRowContext(ctx, `SELECT id, username, email, password_hash, email_verified_at, `+twoFactorOf("users")+`, created_at
 		FROM users WHERE username = ? OR email = ?`, login, login).
 		Scan(&u.ID, &u.Username, &u.Email, &hash, &verified, &twoFactor, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -243,7 +243,7 @@ func (s *Service) SessionUser(ctx context.Context, secret string) (*User, error)
 		createdAt int64
 		lastSeen  int64
 	)
-	err := s.DB.QueryRowContext(ctx, `SELECT u.id, u.username, u.email, u.email_verified_at, u.totp_enabled_at, u.created_at, s.last_seen_at
+	err := s.DB.QueryRowContext(ctx, `SELECT u.id, u.username, u.email, u.email_verified_at, `+twoFactorOf("u")+`, u.created_at, s.last_seen_at
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ? AND s.expires_at > ?`, digest, now.Unix()).
 		Scan(&u.ID, &u.Username, &u.Email, &verified, &twoFactor, &createdAt, &lastSeen)
@@ -519,7 +519,7 @@ func (s *Service) AuthenticateToken(ctx context.Context, secret string) (*User, 
 		expires, lastUsed sql.NullInt64
 	)
 	var twoFactor, publisher sql.NullInt64
-	err := s.DB.QueryRowContext(ctx, `SELECT u.id, u.username, u.email, u.email_verified_at, u.totp_enabled_at, u.created_at,
+	err := s.DB.QueryRowContext(ctx, `SELECT u.id, u.username, u.email, u.email_verified_at, `+twoFactorOf("u")+`, u.created_at,
 			t.id, t.name, t.prefix, t.scope, t.created_at, t.expires_at, t.last_used_at, t.publisher_id, t.claims
 		FROM api_tokens t JOIN users u ON u.id = t.user_id
 		WHERE t.token_hash = ? AND t.revoked_at IS NULL AND (t.expires_at IS NULL OR t.expires_at > ?)`,
@@ -593,7 +593,7 @@ func (s *Service) userByID(ctx context.Context, id int64) (*User, error) {
 		twoFactor sql.NullInt64
 		createdAt int64
 	)
-	err := s.DB.QueryRowContext(ctx, `SELECT id, username, email, email_verified_at, totp_enabled_at, created_at FROM users WHERE id = ?`, id).
+	err := s.DB.QueryRowContext(ctx, `SELECT id, username, email, email_verified_at, `+twoFactorOf("users")+`, created_at FROM users WHERE id = ?`, id).
 		Scan(&u.ID, &u.Username, &u.Email, &verified, &twoFactor, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -666,4 +666,11 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// twoFactorOf is a SQL expression that is non-NULL when the users row
+// (under alias) has two-factor authentication: an authenticator app or at
+// least one passkey.
+func twoFactorOf(alias string) string {
+	return "COALESCE(" + alias + ".totp_enabled_at, (SELECT MIN(p.created_at) FROM passkeys p WHERE p.user_id = " + alias + ".id))"
 }

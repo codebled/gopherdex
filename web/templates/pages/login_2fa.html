@@ -3,20 +3,29 @@
   <div class="wrap auth-grid">
     <div class="auth-intro">
       <p class="kicker">Two-factor authentication</p>
-      <h1>Enter your code.</h1>
-      <p class="sub">Open your authenticator app and enter the 6-digit code for Gopherdex. Lost your phone? Use one of your recovery codes instead.</p>
+      <h1>{{if and .Passkeys (not .App)}}Confirm it's you.{{else}}Enter your code.{{end}}</h1>
+      <p class="sub">{{if .Passkeys}}Use your passkey{{if .App}}, or enter the 6-digit code from your authenticator app{{end}}.{{else}}Open your authenticator app and enter the 6-digit code for Gopherdex.{{end}} Lost your device? Use one of your recovery codes instead.</p>
     </div>
-    <form class="form-card" action="/login/2fa" method="post">
+    <div class="form-card">
       {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
-      <input type="hidden" name="next" value="{{.Next}}">
-      <div class="field">
-        <label for="code">Authentication code</label>
-        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required maxlength="20" autofocus
-          autocapitalize="none" spellcheck="false" placeholder="123456">
+      {{if .Passkeys}}
+      <div class="passkey-signin" data-passkey-2fa data-next="{{.Next}}">
+        <button class="btn btn-primary btn-block" type="button">Use a passkey</button>
+        <p class="notice danger" data-passkey-error role="alert" hidden></p>
+        <p class="or"><span>or</span></p>
       </div>
-      <button class="btn btn-primary btn-block" type="submit">Verify</button>
+      {{end}}
+      <form class="stack-form" action="/login/2fa" method="post">
+        <input type="hidden" name="next" value="{{.Next}}">
+        <div class="field">
+          <label for="code">{{if .App}}Authentication or recovery code{{else}}Recovery code{{end}}</label>
+          <input id="code" name="code" type="text" inputmode="{{if .App}}numeric{{else}}text{{end}}" autocomplete="one-time-code" required maxlength="20"{{if not .Passkeys}} autofocus{{end}}
+            autocapitalize="none" spellcheck="false" placeholder="{{if .App}}123456{{else}}xxxx-xxxx-xxxx{{end}}">
+        </div>
+        <button class="btn {{if .Passkeys}}btn-outline{{else}}btn-primary{{end}} btn-block" type="submit">Verify</button>
+      </form>
       <p class="form-foot"><a href="/login">Start over</a></p>
-    </form>
+    </div>
   </div>
 </section>
 {{end}}{{end}}

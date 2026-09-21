@@ -94,6 +94,35 @@
           </table>
         </div>
       </section>
+
+      <section class="panel danger-panel" aria-labelledby="delete-title">
+        <div class="panel-head"><h2 id="delete-title">Delete account</h2><p>Permanent</p></div>
+        <form class="panel-body stack-form" action="/account/delete" method="post">
+          {{with .Errors.delete}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+          <p class="muted">This deletes @{{.User.Username}} with its sessions, API tokens and trusted publishers, and can't be undone. Modules you published <strong>stay available</strong>, because programs depend on them. Their other owners keep managing them. The name @{{.User.Username}} can't be registered again, so nobody can take over your module paths.</p>
+          <div class="field">
+            <label for="delete-password">Password</label>
+            <input id="delete-password" name="delete_password" type="password" autocomplete="current-password" required
+              {{with .Errors.delete_password}}aria-invalid="true" aria-describedby="delete-password-error"{{end}}>
+            {{with .Errors.delete_password}}<p class="field-error" id="delete-password-error">{{.}}</p>{{end}}
+          </div>
+          {{if .User.TwoFactor}}
+          <div class="field">
+            <label for="delete-code">Authenticator or recovery code</label>
+            <input id="delete-code" name="delete_code" type="text" inputmode="numeric" autocomplete="one-time-code" required maxlength="20"
+              {{with .Errors.delete_code}}aria-invalid="true" aria-describedby="delete-code-error"{{end}}>
+            {{with .Errors.delete_code}}<p class="field-error" id="delete-code-error">{{.}}</p>{{end}}
+          </div>
+          {{end}}
+          <div class="field">
+            <label for="delete-confirm">Type <code>{{.User.Username}}</code> to confirm</label>
+            <input id="delete-confirm" name="confirm" type="text" required autocapitalize="none" spellcheck="false" autocomplete="off"
+              {{with .Errors.confirm}}aria-invalid="true" aria-describedby="delete-confirm-error"{{end}}>
+            {{with .Errors.confirm}}<p class="field-error" id="delete-confirm-error">{{.}}</p>{{end}}
+          </div>
+          <button class="btn btn-danger-outline" type="submit">Delete my account</button>
+        </form>
+      </section>
     </div>
   </div>
 </section>

@@ -104,6 +104,7 @@
             {{with .TagURL}}<li><a href="{{.}}" rel="nofollow ugc noopener">Source at {{$.Data.Version}}</a></li>{{end}}
             <li><a href="{{.VersionURL}}?tab=docs">Package documentation</a></li>
             <li><a href="{{.ModURL}}">go.mod</a></li>
+            <li><a href="/feeds{{.URL}}.atom">Releases feed (Atom)</a></li>
             <li><a class="report-link" href="/report?module={{.Path}}">Report this module</a></li>
           </ul>
         </section>

@@ -3,9 +3,11 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
 	"github.com/parthiban-sivakumar/gopherdex/internal/module"
@@ -80,7 +82,15 @@ func (s *server) handleUndeprecate(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleSetCollaborator(w http.ResponseWriter, r *http.Request) {
 	s.maintainerAction(w, r, "role-set", func(u *accounts.User, modPath string) error {
-		return s.registry.SetCollaborator(r.Context(), u, modPath, r.PostFormValue("username"), r.PostFormValue("role"), s.clientOf(r))
+		target, role := accounts.NormalizeUsername(strings.TrimPrefix(strings.TrimSpace(r.PostFormValue("username")), "@")), r.PostFormValue("role")
+		if err := s.registry.SetCollaborator(r.Context(), u, modPath, target, role, s.clientOf(r)); err != nil {
+			return err
+		}
+		if target != u.Username {
+			s.emailUser(target, accounts.EmailAccess, "You're now "+article(role)+" "+role+" of "+modPath,
+				fmt.Sprintf("@%s made you %s %s of %s on Gopherdex.\n\n%s%s", u.Username, article(role), role, modPath, s.siteURL, s.project.URL(modPath, "")))
+		}
+		return nil
 	})
 }
 
@@ -130,7 +140,16 @@ func (s *server) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleSetOrgMember(w http.ResponseWriter, r *http.Request) {
 	s.orgAction(w, r, "member-set", func(u *accounts.User, org string) error {
-		return s.registry.SetOrgMember(r.Context(), u, org, r.PostFormValue("username"), r.PostFormValue("role"), s.clientOf(r))
+		target, role := accounts.NormalizeUsername(strings.TrimPrefix(strings.TrimSpace(r.PostFormValue("username")), "@")), r.PostFormValue("role")
+		if err := s.registry.SetOrgMember(r.Context(), u, org, target, role, s.clientOf(r)); err != nil {
+			return err
+		}
+		if target != u.Username {
+			s.emailUser(target, accounts.EmailAccess, "You're now "+article(role)+" "+role+" of @"+org,
+				fmt.Sprintf("@%s made you %s %s of the organization @%s on Gopherdex. You can publish modules under %s/%s/.\n\n%s/%s",
+					u.Username, article(role), role, org, s.moduleHost, org, s.siteURL, org))
+		}
+		return nil
 	})
 }
 

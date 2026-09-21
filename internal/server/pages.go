@@ -27,6 +27,15 @@ type page struct {
 	ProxyURL   string
 	ModuleHost string
 	ZeroConfig bool
+	Feed       *feedLink // advertised to feed readers
+}
+
+// feedOf returns the feed a page's data offers, if any.
+func feedOf(data any) *feedLink {
+	if f, ok := data.(interface{ Feed() *feedLink }); ok {
+		return f.Feed()
+	}
+	return nil
 }
 
 // parsePages builds one template set per page: the shared layout plus that
@@ -103,7 +112,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 	}
 	user := s.currentUser(r)
 	var buf bytes.Buffer
-	if err := t.ExecuteTemplate(&buf, "base", page{Title: title, User: user, Data: data, ProxyURL: s.siteURL + proxyPrefix, ModuleHost: s.moduleHost, ZeroConfig: s.zeroConfig}); err != nil {
+	if err := t.ExecuteTemplate(&buf, "base", page{Title: title, User: user, Data: data, ProxyURL: s.siteURL + proxyPrefix, ModuleHost: s.moduleHost, ZeroConfig: s.zeroConfig, Feed: feedOf(data)}); err != nil {
 		s.serverError(w, r, fmt.Errorf("render %s: %w", name, err))
 		return
 	}

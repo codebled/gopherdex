@@ -30,6 +30,37 @@
           <p class="muted">Open the link we emailed you to confirm this address. You need a confirmed email before you can create API tokens.</p>
           <form action="/account/email/resend" method="post"><button class="btn btn-outline btn-sm" type="submit">Resend the link</button></form>
           {{end}}
+          {{with .PendingEmail}}<p class="notice" role="status">Waiting for you to open the link sent to <strong>{{.}}</strong>. Your address changes once you do.</p>{{end}}
+
+          <details class="settings-details"{{if or .Errors.new_email .Errors.current_password}} open{{end}}>
+            <summary>Change email address</summary>
+            <form class="stack-form" action="/account/email" method="post">
+              <div class="field">
+                <label for="new-email">New email address</label>
+                <input id="new-email" name="new_email" type="email" required maxlength="254" autocomplete="email" value="{{.NewEmail}}"
+                  {{with .Errors.new_email}}aria-invalid="true" aria-describedby="new-email-error"{{end}}>
+                {{with .Errors.new_email}}<p class="field-error" id="new-email-error">{{.}}</p>{{end}}
+              </div>
+              <div class="field">
+                <label for="email-password">Current password</label>
+                <input id="email-password" name="current_password" type="password" required autocomplete="current-password"
+                  {{with .Errors.current_password}}aria-invalid="true" aria-describedby="email-password-error"{{end}}>
+                {{with .Errors.current_password}}<p class="field-error" id="email-password-error">{{.}}</p>{{end}}
+              </div>
+              <button class="btn btn-outline btn-sm" type="submit">Send confirmation link</button>
+            </form>
+          </details>
+
+          <form class="prefs-form" action="/account/preferences" method="post">
+            <fieldset>
+              <legend>Email me when</legend>
+              <label class="check"><input type="checkbox" name="publish"{{if .Prefs.Publish}} checked{{end}}> a version of one of my modules is published</label>
+              <label class="check"><input type="checkbox" name="access"{{if .Prefs.Access}} checked{{end}}> someone gives me access to a module or organization</label>
+            </fieldset>
+            <p class="field-help">Security emails (password, two-factor, tokens, trusted publishers, email changes) are always sent.</p>
+            <button class="btn btn-outline btn-sm" type="submit">Save preferences</button>
+          </form>
+          <p class="small"><a href="/account/security#delete-title">Delete your account</a></p>
         </div>
       </section>
 

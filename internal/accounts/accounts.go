@@ -326,26 +326,48 @@ func (s *Service) VerifyEmail(ctx context.Context, secret string, c Client) (*Us
 	defer tx.Rollback()
 
 	var userID int64
-	var username string
-	err = tx.QueryRowContext(ctx, `SELECT u.id, u.username FROM email_verifications v JOIN users u ON u.id = v.user_id
-		WHERE v.token_hash = ? AND v.expires_at > ? AND v.email = u.email`, digest, now.Unix()).Scan(&userID, &username)
+	var username, current, email string
+	err = tx.QueryRowContext(ctx, `SELECT u.id, u.username, u.email, v.email FROM email_verifications v JOIN users u ON u.id = v.user_id
+		WHERE v.token_hash = ? AND v.expires_at > ?`, digest, now.Unix()).Scan(&userID, &username, &current, &email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrInvalidToken
 	}
 	if err != nil {
 		return nil, fmt.Errorf("verify email: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?), updated_at = ? WHERE id = ?`, now.Unix(), now.Unix(), userID); err != nil {
-		return nil, fmt.Errorf("verify email for %s: %w", username, err)
+	// A link for a different address confirms an email change: the new
+	// address only replaces the old one once someone proves they read it.
+	changed := email != current
+	if changed {
+		res, err := tx.ExecContext(ctx, `UPDATE users SET email = ?, email_verified_at = ?, updated_at = ? WHERE id = ?
+			AND NOT EXISTS (SELECT 1 FROM users WHERE email = ? AND id != ?)`, email, now.Unix(), now.Unix(), userID, email, userID)
+		if err != nil {
+			return nil, fmt.Errorf("change email for %s: %w", username, err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return nil, ErrEmailTaken
+		}
+		if err := audit(ctx, tx, userID, "email.changed", current+" -> "+email, c, now); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET email_verified_at = COALESCE(email_verified_at, ?), updated_at = ? WHERE id = ?`, now.Unix(), now.Unix(), userID); err != nil {
+			return nil, fmt.Errorf("verify email for %s: %w", username, err)
+		}
+		if err := audit(ctx, tx, userID, "email.verified", "", c, now); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM email_verifications WHERE user_id = ?`, userID); err != nil {
 		return nil, fmt.Errorf("verify email for %s: %w", username, err)
 	}
-	if err := audit(ctx, tx, userID, "email.verified", "", c, now); err != nil {
-		return nil, err
-	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("verify email for %s: %w", username, err)
+	}
+	if changed {
+		// Tell the old address, in case the account was taken over.
+		s.notify(&User{Username: username, Email: current}, "Your Gopherdex email address was changed",
+			fmt.Sprintf("The email address for @%s was changed from %s to %s. Emails about the account now go to the new address.", username, current, email))
 	}
 	return s.userByID(ctx, userID)
 }

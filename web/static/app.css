@@ -419,6 +419,7 @@ main > section.showcase { padding-block: 64px 88px; }
 .list-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }
 .list-head h2 { font-size: clamp(1.5rem, 2.6vw, 2rem); margin: 0; }
 .list-head a { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.list-links { display: inline-flex; gap: 14px; }
 .module-rows { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .module-rows li + li { border-top: 1px solid var(--line); }
 .module-row { display: grid; gap: 4px; padding: 14px 18px; color: inherit; text-decoration: none; }
@@ -555,3 +556,18 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .report-actions { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .admin-quarantine { margin-top: 24px; }
 
+
+/* Account settings */
+.settings-details { width: 100%; }
+.settings-details summary { cursor: pointer; font-weight: 600; color: var(--link); }
+.settings-details .stack-form { margin-top: 12px; }
+.prefs-form { display: grid; gap: 8px; width: 100%; border-top: 1px solid var(--line); padding-top: 14px; }
+.prefs-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.prefs-form legend { font-weight: 600; margin-bottom: 4px; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; cursor: pointer; }
+.check input { margin-top: 4px; accent-color: var(--link); }
+.danger-panel { border-color: var(--danger); grid-column: 1 / -1; }
+.danger-panel .panel-head h2 { color: var(--danger); }
+.danger-panel .stack-form { max-width: 560px; }
+.orgs-panel .org-form { grid-template-columns: minmax(0, 1fr); justify-items: start; }
+.orgs-panel .org-form .field { width: 100%; }

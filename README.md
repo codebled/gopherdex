@@ -10,7 +10,7 @@ A package registry for Go modules, in the spirit of pypi.org.
 - **Discovery:** full-text search with filters (license, Go version, last release, deprecated) and sorting (relevance, downloads, recently updated, newest), download counts and charts, and a home page with just-updated, most-downloaded and new modules. Public pkg.go.dev results follow in their own section.
 - **Public modules:** modules that aren't hosted here come from `proxy.golang.org`, with search and docs from `pkg.go.dev`. Run with `-offline` to turn this off.
 
-Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)).
+Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done).
 
 ## Run it
 
@@ -255,6 +255,9 @@ To restore, stop the server, put the database file and the blob directory back, 
 | `GET/POST /report?module=` | Report a module |
 | `GET /admin`, `POST /-/admin/{dismiss,quarantine,release}` | Review queue for admins |
 | `GET /account` | Email status and API tokens |
+| `POST /account/email` | Change email: needs the current password; the address changes only when the link sent to the new one is opened, and the old address is told |
+| `POST /account/preferences` | Optional emails: new versions of your modules, and being given access to a module or organization. Security emails can't be turned off |
+| `POST /account/delete` | Delete the account (password, 2FA code if on, and the username typed to confirm). Refused while you're an organization's only owner |
 | `POST /account/tokens`, `POST /account/tokens/{id}/revoke` | Create or revoke a token (requires a verified email) |
 | `GET /api/whoami` | `Authorization: Bearer gdx_…` returns the token's user, namespaces (own and organizations') and scope |
 | `POST /api/yank` | Bearer token; JSON `{"module", "version", "reason", "yank": true\|false}` |
@@ -263,6 +266,12 @@ To restore, stop the server, put the database file and the blob directory back, 
 | `POST /api/oidc/mint-token` | JSON `{"token": "<GitHub Actions ID token>", "module": "<path>"}` returns `{"token","expiresAt","module","publisher"}`: a 15-minute token for that module |
 | `POST /-/publishers`, `/-/publishers/remove` | Add or remove trusted publishers (Manage tab, or the account page before a module's first release) |
 | `POST /api/upload` | Bearer token; `multipart/form-data` with `module`, `version`, optional `repository`, `commit`, `ref`, then a `zip` file. `201` when published, `200` when identical content already exists, `4xx` with `{"error","code"}` otherwise |
+
+**Deleting an account:**
+- **What's removed:** the account, its sessions, API tokens and trusted publishers, and its roles on modules and organizations.
+- **What stays:** published modules. Versions are immutable and other programs depend on them, so co-maintainers keep managing them.
+- **The username:** stays reserved forever, so nobody can publish under the old module paths.
+- **The audit log:** keeps the events, with the username recorded in the deletion entry.
 
 Security notes:
 - **Passwords:** hashed with argon2id. Two-factor secrets are stored as-is, so protect database backups like the live database.
@@ -291,6 +300,8 @@ Security notes:
 | `GET /api/proxy/{module}/@latest` | Info of the latest version (`application/json`) |
 | `GET /tokens.css` | Design tokens generated from `internal/tokens` |
 | `GET /healthz` | `ok`, or `503` when the database is unreachable |
+| `GET /feeds/releases.atom`, `/feeds/new.atom` | Atom feeds of new releases and new modules on the whole registry |
+| `GET /feeds/<owner>.atom`, `/feeds/<owner>/<module>[/vN].atom` | New releases by one user or organization, or of one module. Home, owner and project pages link their feed in `<head>` for feed readers |
 | `GET /robots.txt`, `GET /sitemap.xml` | Crawler rules (accounts, forms and the API are off limits) and every project page with its last release date |
 
 Module paths and versions in proxy URLs are case-escaped (`github.com/Azure/x` → `github.com/!azure/x`). Missing modules return 404, so the `go` command moves on to the next proxy in `GOPROXY`.

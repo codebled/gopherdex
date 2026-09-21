@@ -237,8 +237,18 @@ type messageData struct {
 }
 
 func (s *server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
+	before := s.currentUser(r)
 	u, err := s.accounts.VerifyEmail(r.Context(), r.URL.Query().Get("token"), s.clientOf(r))
 	switch {
+	case errors.Is(err, accounts.ErrEmailTaken):
+		s.render(w, r, http.StatusConflict, "message", "Address in use", messageData{
+			Kicker:      "Email change",
+			Heading:     "Another account uses that address now.",
+			Body:        "Your email address wasn't changed. Choose a different one from your account page.",
+			ActionURL:   "/account",
+			ActionLabel: "Go to your account",
+		})
+		return
 	case errors.Is(err, accounts.ErrInvalidToken):
 		s.render(w, r, http.StatusBadRequest, "message", "Link expired", messageData{
 			Kicker:      "Email verification",
@@ -252,8 +262,12 @@ func (s *server) handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if cur := s.currentUser(r); cur != nil && cur.ID == u.ID {
-		http.Redirect(w, r, "/account?done=email-verified", http.StatusSeeOther)
+	if before != nil && before.ID == u.ID {
+		done := "email-verified"
+		if before.Email != u.Email {
+			done = "email-changed"
+		}
+		http.Redirect(w, r, "/account?done="+done, http.StatusSeeOther)
 		return
 	}
 	s.render(w, r, http.StatusOK, "message", "Email verified", messageData{
@@ -297,6 +311,10 @@ type accountData struct {
 	Error       string
 	Errors      map[string]string
 
+	NewEmail     string // typed into the change-email form
+	PendingEmail string // waiting for confirmation
+	Prefs        accounts.Preferences
+
 	// Trusted publishers for modules not published yet.
 	Pending           []registry.Publisher
 	Publisher         publisherForm
@@ -320,6 +338,9 @@ var notices = map[string]string{
 	"email-verified":    "Your email is verified. You can create API tokens now.",
 	"verification-sent": "We've sent a new verification link. It expires in 24 hours.",
 	"token-revoked":     "Token revoked. Anything using it can no longer publish.",
+	"email-change-sent": "Check your new inbox: the address changes when you open the link we sent there. Until then, emails still go to your current address.",
+	"email-changed":     "Your email address is changed. We told your old address too.",
+	"preferences":       "Email preferences saved.",
 	"publisher-added":   "Trusted publisher added. Its workflow can publish the module's first release with gopherdex publish, no API token needed.",
 	"publisher-removed": "Trusted publisher removed.",
 }
@@ -345,6 +366,14 @@ func (s *server) renderAccount(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 	if data.Memberships, err = s.registry.Memberships(r.Context(), u.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if data.PendingEmail, err = s.accounts.PendingEmail(r.Context(), u); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if data.Prefs, err = s.accounts.Preferences(r.Context(), u.ID); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

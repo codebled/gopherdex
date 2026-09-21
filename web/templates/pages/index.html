@@ -30,7 +30,7 @@
         <div>
           <div class="list-head">
             <h2>Just updated</h2>
-            <a href="/search">Browse all →</a>
+            <span class="list-links"><a href="/feeds/releases.atom" title="Atom feed of new releases">Feed</a> <a href="/search">Browse all →</a></span>
           </div>
           <ol class="module-rows">
             {{range .Recent}}
@@ -66,6 +66,7 @@
         <div>
           <div class="list-head">
             <h2>New modules</h2>
+            <a href="/feeds/new.atom" title="Atom feed of new modules">Feed</a>
           </div>
           <ol class="module-rows">
             {{range .New}}

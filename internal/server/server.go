@@ -183,6 +183,9 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /account", s.handleAccount)
 	mux.HandleFunc("POST /account/email/resend", s.handleResendVerification)
 	mux.HandleFunc("POST /account/tokens", s.handleCreateToken)
+	mux.HandleFunc("POST /account/email", s.handleChangeEmail)
+	mux.HandleFunc("POST /account/preferences", s.handlePreferences)
+	mux.HandleFunc("POST /account/delete", s.handleDeleteAccount)
 	mux.HandleFunc("POST /account/tokens/{id}/revoke", s.handleRevokeToken)
 
 	mux.HandleFunc("POST /-/yank", s.handleYank)
@@ -216,6 +219,7 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("GET /healthz", s.handleHealthz)
 	mux.HandleFunc("GET /robots.txt", s.handleRobots)
 	mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
+	mux.HandleFunc("GET /feeds/{path...}", s.limited(s.handleFeed))
 
 	// Browsers send Sec-Fetch-Site/Origin on form posts, so cross-site
 	// POSTs (CSRF) are rejected. API clients such as the CLI send neither

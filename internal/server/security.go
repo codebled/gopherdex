@@ -458,6 +458,13 @@ func (s *server) handleRelease(w http.ResponseWriter, r *http.Request) {
 // emailMaintainers sends a notice to everyone who maintains modPath, in the
 // background.
 func (s *server) emailMaintainers(modPath, subject, body string) {
+	s.emailMaintainersWho(modPath, "", subject, body)
+}
+
+// emailMaintainersWho emails the maintainers who want emails of kind
+// (accounts.EmailPublish…); an empty kind means everyone, for security
+// notices nobody can turn off.
+func (s *server) emailMaintainersWho(modPath, kind, subject, body string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -466,7 +473,12 @@ func (s *server) emailMaintainers(modPath, subject, body string) {
 			s.log.Error("notify maintainers", "module", modPath, "err", err)
 			return
 		}
-		emails, err := s.accounts.UserEmails(ctx, names)
+		var emails map[string]string
+		if kind == "" {
+			emails, err = s.accounts.UserEmails(ctx, names)
+		} else {
+			emails, err = s.accounts.EmailsFor(ctx, names, kind)
+		}
 		if err != nil {
 			s.log.Error("notify maintainers", "module", modPath, "err", err)
 			return
@@ -480,16 +492,43 @@ func (s *server) emailMaintainers(modPath, subject, body string) {
 	}()
 }
 
+// emailUser emails one user, if they want emails of kind.
+func (s *server) emailUser(username, kind, subject, body string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		emails, err := s.accounts.EmailsFor(ctx, []string{username}, kind)
+		if err != nil {
+			s.log.Error("email user", "user", username, "err", err)
+			return
+		}
+		for name, email := range emails {
+			msg := mail.Message{To: email, Subject: subject, Body: "Hi " + name + ",\n\n" + body + "\n\nChoose which emails you get at " + s.siteURL + "/account.\n"}
+			if err := s.accounts.Mailer.Send(ctx, msg); err != nil {
+				s.log.Error("email user", "user", name, "err", err)
+			}
+		}
+	}()
+}
+
+// article is "an" before owner and "a" before maintainer and member.
+func article(role string) string {
+	if role == "owner" {
+		return "an"
+	}
+	return "a"
+}
+
 // notifyPublished tells every maintainer about a new version, so a leaked
 // token is noticed quickly.
 func (s *server) notifyPublished(modPath, version string, u *accounts.User, tok *accounts.Token, ip string) {
 	if p := registry.ParseProvenance(tok.Claims); tok.PublisherID != 0 && p != nil {
-		s.emailMaintainers(modPath, fmt.Sprintf("%s %s was published", modPath, version),
+		s.emailMaintainersWho(modPath, accounts.EmailPublish, fmt.Sprintf("%s %s was published", modPath, version),
 			fmt.Sprintf("The GitHub Actions workflow %s in %s published %s@%s through a trusted publisher added by @%s.\n\nRun: %s\n\n%s%s\n\nIf you didn't expect this, remove the trusted publisher and yank the version on the module's Manage tab.",
 				p.Workflow, p.RepositoryURL(), modPath, version, u.Username, p.RunURL(), s.siteURL, s.project.URL(modPath, version)))
 		return
 	}
-	s.emailMaintainers(modPath, fmt.Sprintf("%s %s was published", modPath, version),
+	s.emailMaintainersWho(modPath, accounts.EmailPublish, fmt.Sprintf("%s %s was published", modPath, version),
 		fmt.Sprintf("@%s published %s@%s using the API token %q (from %s).\n\n%s%s\n\nIf you didn't expect this, revoke the token at %s/account and yank the version from the module's Manage tab.",
 			u.Username, modPath, version, tok.Name, ip, s.siteURL, s.project.URL(modPath, version), s.siteURL))
 }

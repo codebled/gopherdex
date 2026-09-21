@@ -1,0 +1,37 @@
+# Gopherdex behind Caddy with automatic HTTPS.
+#
+#   cp gopherdex.env.example gopherdex.env   # then fill it in
+#   docker compose up -d
+#   docker compose logs -f gopherdex
+services:
+  gopherdex:
+    image: ghcr.io/parthiban-sivakumar/gopherdex:latest
+    build: ..
+    restart: unless-stopped
+    env_file: gopherdex.env
+    environment:
+      GOPHERDEX_TRUST_PROXY: "true" # client IPs come from Caddy's X-Forwarded-For
+    volumes:
+      - gopherdex-data:/data
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    env_file: gopherdex.env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - gopherdex
+
+volumes:
+  gopherdex-data:
+  caddy-data:
+  caddy-config:

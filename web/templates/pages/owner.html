@@ -1,0 +1,67 @@
+{{define "content"}}{{with .Data}}
+<section class="account">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker">{{if .Org}}Organization{{else}}Publisher{{end}}</p>
+        <h1>{{if .Org}}{{with .Org.DisplayName}}<span class="display-name">{{.}}</span> {{end}}{{end}}@{{.Namespace}}</h1>
+        <p class="muted">{{len .Modules}} module{{if ne (len .Modules) 1}}s{{end}} published{{if .Org}} · {{len .Members}} member{{if ne (len .Members) 1}}s{{end}}{{end}}</p>
+      </div>
+      <div class="namespace-card">
+        <span class="muted">Modules install as</span>
+        <code>{{$.ModuleHost}}/{{.Namespace}}/…</code>
+      </div>
+    </div>
+
+    {{with .Notice}}<p class="notice success" role="status">{{.}}</p>{{end}}
+    {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+
+    {{if .Modules}}
+    <ul class="cards">
+      {{range .Modules}}
+      <li>
+        <a class="card" href="{{.URL}}">
+          <span class="card-top"><code>{{.Path}}</code><span class="pill p-version">{{.Latest}}</span></span>
+          <span class="card-syn">{{.Versions}} version{{if ne .Versions 1}}s{{end}} · updated {{.PublishedAt.Format "2 Jan 2006"}}</span>
+          <span class="card-link">Project page →</span>
+        </a>
+      </li>
+      {{end}}
+    </ul>
+    {{else if .Org}}
+    <p class="empty">No modules yet. Members publish under <code>{{$.ModuleHost}}/{{.Namespace}}/&lt;module&gt;</code>.</p>
+    {{else}}
+    <p class="empty">{{if .IsSelf}}You haven't published any modules yet. See <a href="/account">your account page</a> for how to publish.{{else}}@{{.Namespace}} hasn't published any modules yet.{{end}}</p>
+    {{end}}
+
+    {{if .Org}}
+    <section class="panel org-members" aria-labelledby="members-title">
+      <div class="panel-head"><h2 id="members-title">Members</h2><p>Owners manage members and own every module here; members publish and yank.</p></div>
+      <ul class="collab-list">
+        {{range .Members}}
+        <li>
+          <span><a href="/{{.Username}}">@{{.Username}}</a> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span></span>
+          {{if $.Data.IsOrgOwner}}
+          <form class="inline-form" action="/-/orgs/members/remove" method="post">
+            <input type="hidden" name="org" value="{{$.Data.Namespace}}"><input type="hidden" name="username" value="{{.Username}}">
+            <button class="btn btn-link" type="submit" aria-label="Remove @{{.Username}}">Remove</button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{if .IsOrgOwner}}
+      <form class="inline-form add-collab" action="/-/orgs/members" method="post">
+        <input type="hidden" name="org" value="{{.Namespace}}">
+        <label class="visually-hidden" for="member-user">Username</label>
+        <input id="member-user" name="username" type="text" required placeholder="@username" autocapitalize="none" spellcheck="false">
+        <label class="visually-hidden" for="member-role">Role</label>
+        <select id="member-role" name="role"><option value="member">Member</option><option value="owner">Owner</option></select>
+        <button class="btn btn-primary btn-sm" type="submit">Add or update</button>
+      </form>
+      {{end}}
+    </section>
+    {{end}}
+  </div>
+</section>
+{{end}}{{end}}

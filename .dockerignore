@@ -1,0 +1,7 @@
+.git
+bin
+dist
+data/*.db*
+data/blobs
+data/backups
+deploy/*.env

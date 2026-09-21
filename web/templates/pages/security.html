@@ -1,0 +1,100 @@
+{{define "content"}}{{with .Data}}
+<section class="account">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker"><a href="/account">Your account</a></p>
+        <h1>Security</h1>
+        <p class="muted">Sign-in protection, password and recent activity for @{{.User.Username}}.</p>
+      </div>
+    </div>
+
+    {{with .Notice}}<p class="notice success" role="status">{{.}}</p>{{end}}
+
+    <div class="security-grid">
+      <section class="panel" aria-labelledby="tfa-title">
+        <div class="panel-head"><h2 id="tfa-title">Two-factor authentication</h2>
+          {{if .User.TwoFactor}}<span class="pill p-latest">On</span>{{else}}<span class="pill p-pre">Off</span>{{end}}
+        </div>
+        <div class="panel-body">
+          {{if .RecoveryCodes}}
+          <p class="notice success" role="status"><strong>Two-factor authentication is on.</strong> Save these recovery codes somewhere safe, like a password manager. Each works once if you lose your phone. You won't see them again.</p>
+          <div class="recovery-codes">
+            <pre>{{range .RecoveryCodes}}{{.}}
+{{end}}</pre>
+            <button class="btn btn-outline btn-sm" type="button" data-copy="{{range .RecoveryCodes}}{{.}} {{end}}">Copy all</button>
+          </div>
+          {{else if .User.TwoFactor}}
+          <p>Signing in needs a code from your authenticator app. You have <strong>{{.CodesLeft}}</strong> unused recovery code{{if ne .CodesLeft 1}}s{{end}}.</p>
+          <form class="inline-form" action="/account/security/2fa/disable" method="post">
+            <label class="visually-hidden" for="disable-code">Current code</label>
+            <input id="disable-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Current code" required
+              {{with .Errors.disable}}aria-invalid="true"{{end}}>
+            <button class="btn btn-danger-outline btn-sm" type="submit">Turn off</button>
+          </form>
+          {{with .Errors.disable}}<p class="field-error">{{.}}</p>{{end}}
+          {{else}}
+          <p>Protect your account and your modules with a second step at sign-in.{{if .Require2FA}} <strong>This registry requires it to publish.</strong>{{end}}</p>
+          <ol class="tfa-steps">
+            <li>Scan this code with an authenticator app (1Password, Google Authenticator, Authy…).
+              <div class="qr"><img src="{{.QR}}" width="220" height="220" alt="QR code for adding Gopherdex to an authenticator app"></div>
+              <p class="muted small">Can't scan it? Enter this key: <code class="secret">{{.Setup.Secret}}</code></p>
+            </li>
+            <li>Enter the 6-digit code the app shows.
+              <form class="inline-form" action="/account/security/2fa" method="post">
+                <label class="visually-hidden" for="confirm-code">Code from the app</label>
+                <input id="confirm-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required
+                  {{with .Errors.code}}aria-invalid="true"{{end}}>
+                <button class="btn btn-primary btn-sm" type="submit">Turn on</button>
+              </form>
+              {{with .Errors.code}}<p class="field-error">{{.}}</p>{{end}}
+            </li>
+          </ol>
+          {{end}}
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="pw-title">
+        <div class="panel-head"><h2 id="pw-title">Password</h2></div>
+        <form class="panel-body stack-form" action="/account/security/password" method="post">
+          <div class="field">
+            <label for="current-password">Current password</label>
+            <input id="current-password" name="current_password" type="password" autocomplete="current-password" required
+              {{with .Errors.current_password}}aria-invalid="true" aria-describedby="current-error"{{end}}>
+            {{with .Errors.current_password}}<p class="field-error" id="current-error">{{.}}</p>{{end}}
+          </div>
+          <div class="field">
+            <label for="new-password">New password</label>
+            <input id="new-password" name="new_password" type="password" autocomplete="new-password" required minlength="10"
+              {{with .Errors.new_password}}aria-invalid="true" aria-describedby="new-error"{{end}}>
+            {{with .Errors.new_password}}<p class="field-error" id="new-error">{{.}}</p>{{else}}<p class="field-help">At least 10 characters. Other sessions are signed out.</p>{{end}}
+          </div>
+          <button class="btn btn-primary" type="submit">Change password</button>
+        </form>
+      </section>
+
+      <section class="panel" aria-labelledby="sessions-title">
+        <div class="panel-head"><h2 id="sessions-title">Sessions</h2><p>{{.Sessions}} signed in</p></div>
+        <div class="panel-body">
+          <p class="muted">Signed in on a shared or lost device? Sign out everywhere except here.</p>
+          <form action="/account/security/sessions" method="post"><button class="btn btn-outline btn-sm" type="submit">Sign out other sessions</button></form>
+        </div>
+      </section>
+
+      <section class="panel security-log" aria-labelledby="log-title">
+        <div class="panel-head"><h2 id="log-title">Recent activity</h2><p>Last 30 events</p></div>
+        <div class="table-wrap">
+          <table class="tokens">
+            <thead><tr><th scope="col">When</th><th scope="col">Event</th><th scope="col">Details</th><th scope="col">IP address</th></tr></thead>
+            <tbody>
+              {{range .Events}}
+              <tr><td>{{.At.Format "2 Jan 2006 15:04"}} UTC</td><td><code>{{.Action}}</code></td><td>{{.Detail}}</td><td><code>{{.IP}}</code></td></tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+{{end}}{{end}}

@@ -1,0 +1,21 @@
+{{define "content"}}{{with .Data}}
+<section class="auth">
+  <div class="wrap auth-grid">
+    <div class="auth-intro">
+      <p class="kicker">Account recovery</p>
+      <h1>Choose a new password.</h1>
+      <p class="sub">You'll be signed out on every device, then you can sign in with the new password.</p>
+    </div>
+    <form class="form-card" action="/reset-password" method="post">
+      <input type="hidden" name="token" value="{{.Token}}">
+      <div class="field">
+        <label for="password">New password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="256"
+          {{with .Error}}aria-invalid="true" aria-describedby="password-error"{{end}}>
+        {{with .Error}}<p class="field-error" id="password-error">{{.}}</p>{{else}}<p class="field-help">At least 10 characters.</p>{{end}}
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Change password</button>
+    </form>
+  </div>
+</section>
+{{end}}{{end}}

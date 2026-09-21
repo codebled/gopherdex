@@ -1,0 +1,114 @@
+{{define "content"}}{{with .Data}}
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap hero-center">
+      <h1 id="hero-title">Find, install and publish <mark>Go modules.</mark></h1>
+      <p class="lead">Gopherdex is a registry for Go libraries. Search for the module you need, read its docs and release history, and add it to your project with <code>go get</code>.</p>
+
+      <form class="search" id="search-form" action="/search" method="get" role="search">
+        <label class="visually-hidden" for="q">Search Go modules</label>
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+        <input id="q" name="q" type="search" placeholder="Search modules" autocomplete="off" spellcheck="false" maxlength="200">
+        <button class="btn btn-primary" type="submit">Search</button>
+      </form>
+
+      <dl class="stats-line" aria-label="Registry statistics">
+        <div><dt>modules</dt><dd>{{.Stats.Modules}}</dd></div>
+        <div><dt>releases</dt><dd>{{.Stats.Releases}}</dd></div>
+        <div><dt>publishers</dt><dd>{{.Stats.Publishers}}</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="library" id="library" aria-live="polite" hidden>
+    <div class="wrap" id="library-body"></div>
+  </section>
+
+  <section class="showcase" id="browse" aria-label="Modules on Gopherdex">
+    <div class="wrap">
+      {{if .Recent}}
+      <div class="showcase-grid{{if .Popular}} three{{end}}">
+        <div>
+          <div class="list-head">
+            <h2>Just updated</h2>
+            <a href="/search">Browse all →</a>
+          </div>
+          <ol class="module-rows">
+            {{range .Recent}}
+            <li>
+              <a class="module-row" href="{{projectURL $.ModuleHost .Path}}">
+                <span class="row-top"><code class="row-name">{{breakable .Path}}</code><span class="pill p-version">{{.Version}}</span></span>
+                {{with .Synopsis}}<span class="row-syn">{{.}}</span>{{end}}
+                <span class="row-meta">@{{.Namespace}} · released {{since .PublishedAt}}</span>
+              </a>
+            </li>
+            {{end}}
+          </ol>
+        </div>
+        {{if .Popular}}
+        <div>
+          <div class="list-head">
+            <h2>Most downloaded</h2>
+            <a href="/search?sort=downloads">See more →</a>
+          </div>
+          <ol class="module-rows">
+            {{range .Popular}}
+            <li>
+              <a class="module-row" href="{{projectURL $.ModuleHost .Path}}">
+                <span class="row-top"><code class="row-name">{{breakable .Path}}</code><span class="pill p-version">{{.Version}}</span></span>
+                {{with .Synopsis}}<span class="row-syn">{{.}}</span>{{end}}
+                <span class="row-meta">{{number .Downloads30}} download{{if ne .Downloads30 1}}s{{end}} this month</span>
+              </a>
+            </li>
+            {{end}}
+          </ol>
+        </div>
+        {{end}}
+        <div>
+          <div class="list-head">
+            <h2>New modules</h2>
+          </div>
+          <ol class="module-rows">
+            {{range .New}}
+            <li>
+              <a class="module-row" href="{{projectURL $.ModuleHost .Path}}">
+                <span class="row-top"><code class="row-name">{{breakable .Path}}</code><span class="pill p-version">{{.Version}}</span></span>
+                {{with .Synopsis}}<span class="row-syn">{{.}}</span>{{end}}
+                <span class="row-meta">@{{.Namespace}} · added {{since .CreatedAt}}</span>
+              </a>
+            </li>
+            {{end}}
+          </ol>
+        </div>
+      </div>
+      {{else}}
+      <div class="empty-registry">
+        <h2>No modules yet.</h2>
+        <p>This registry is waiting for its first library. Publish yours and it will show up here.</p>
+        <a class="btn btn-primary" href="{{if $.User}}/account{{else}}/signup{{end}}">Publish the first module</a>
+      </div>
+      {{end}}
+    </div>
+  </section>
+
+  <section class="band" id="publish" aria-labelledby="publish-title">
+    <div class="wrap band-inner">
+      <div>
+        <h2 id="publish-title">Share your Go module <mark>with everyone.</mark></h2>
+        <p>Create an account, tag a release and publish it with one command. Your module gets a project page, docs and release history, and installs with <code>go get</code>.</p>
+      </div>
+      <div class="band-actions">
+        <ol class="publish-steps-band">
+          <li><span>1</span>Name it <code>{{.ModuleHost}}/&lt;you&gt;/&lt;module&gt;</code></li>
+          <li><span>2</span><code>git tag v0.1.0</code></li>
+          <li><span>3</span><code>gopherdex publish</code></li>
+        </ol>
+        <p class="cli-install">Get the CLI: <code>{{cliInstall}}</code></p>
+        {{if $.User}}
+        <a class="btn btn-ink" href="/account">Create a publish token</a>
+        {{else}}
+        <a class="btn btn-ink" href="/signup">Create an account</a>
+        {{end}}
+      </div>
+    </div>
+  </section>
+{{end}}{{end}}

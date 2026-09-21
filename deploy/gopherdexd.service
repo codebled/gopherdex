@@ -1,0 +1,40 @@
+# systemd unit for running gopherdexd without containers, behind Caddy or
+# another reverse proxy on the same machine.
+#
+#   sudo install -m 0755 gopherdexd /usr/local/bin/
+#   sudo install -D -m 0600 gopherdex.env /etc/gopherdex/gopherdex.env
+#   sudo cp gopherdexd.service /etc/systemd/system/ && sudo systemctl enable --now gopherdexd
+[Unit]
+Description=Gopherdex Go module registry
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/gopherdexd
+EnvironmentFile=/etc/gopherdex/gopherdex.env
+Environment=GOPHERDEX_ADDR=127.0.0.1:8080
+Environment=GOPHERDEX_TRUST_PROXY=true
+Environment=GOPHERDEX_DB=/var/lib/gopherdex/gopherdex.db
+Environment=GOPHERDEX_BLOBS=/var/lib/gopherdex/blobs
+Environment=GOPHERDEX_BACKUP_DIR=/var/lib/gopherdex/backups
+StateDirectory=gopherdex
+DynamicUser=yes
+Restart=on-failure
+
+# Hardening: the server only needs its state directory and the network.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

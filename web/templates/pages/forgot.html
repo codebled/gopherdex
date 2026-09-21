@@ -1,0 +1,26 @@
+{{define "content"}}{{with .Data}}
+<section class="auth">
+  <div class="wrap auth-grid">
+    <div class="auth-intro">
+      <p class="kicker">Account recovery</p>
+      <h1>Reset your password.</h1>
+      <p class="sub">Enter the email address on your account and we'll send you a link to choose a new password.</p>
+    </div>
+    {{if .Sent}}
+    <div class="form-card">
+      <p class="notice success" role="status">If an account uses <strong>{{.Email}}</strong>, a reset link is on its way. It expires in an hour.</p>
+      <p class="form-foot">Didn't get it? Check your spam folder, or <a href="/forgot-password">try again</a>.</p>
+    </div>
+    {{else}}
+    <form class="form-card" action="/forgot-password" method="post">
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required maxlength="254">
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Send the reset link</button>
+      <p class="form-foot"><a href="/login">Back to sign in</a></p>
+    </form>
+    {{end}}
+  </div>
+</section>
+{{end}}{{end}}

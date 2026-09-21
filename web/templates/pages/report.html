@@ -1,0 +1,36 @@
+{{define "content"}}{{with .Data}}
+<section class="auth">
+  <div class="wrap auth-grid">
+    <div class="auth-intro">
+      <p class="kicker">Report a module</p>
+      <h1>Something wrong with <code class="report-path">{{.Module}}</code>?</h1>
+      <p class="sub">Reports go to the registry's administrators, who can hide a module while they look into it. The module's owners don't see who reported it.</p>
+    </div>
+    {{if .Sent}}
+    <div class="form-card">
+      <p class="notice success" role="status"><strong>Thanks, your report was sent.</strong> Administrators review reports in the order they arrive.</p>
+      <a class="btn btn-primary" href="{{.URL}}">Back to {{.Module}}</a>
+    </div>
+    {{else}}
+    <form class="form-card" action="/report" method="post">
+      {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+      <input type="hidden" name="module" value="{{.Module}}">
+      <fieldset class="field">
+        <legend>What's the problem?</legend>
+        {{range .Categories}}
+        <label class="opt"><input type="radio" name="category" value="{{.}}" required{{if eq . $.Data.Category}} checked{{end}}>
+          {{if eq . "malware"}}Malware or harmful code{{else if eq . "typosquatting"}}Pretends to be another module (typosquatting){{else if eq . "spam"}}Spam or no real code{{else if eq . "license"}}Copied code that breaks a license{{else}}Something else{{end}}
+        </label>
+        {{end}}
+      </fieldset>
+      <div class="field">
+        <label for="details">Details</label>
+        <textarea id="details" name="details" rows="6" maxlength="4000" required placeholder="What did you find, and where? For example: init() in retry.go downloads and runs a binary.">{{.Details}}</textarea>
+      </div>
+      <button class="btn btn-danger-outline btn-block" type="submit">Send report</button>
+      <p class="form-foot"><a href="{{.URL}}">Cancel</a></p>
+    </form>
+    {{end}}
+  </div>
+</section>
+{{end}}{{end}}

@@ -1,0 +1,208 @@
+{{define "content"}}{{with .Data}}
+<section class="account">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker">Your account</p>
+        <h1>@{{.User.Username}}</h1>
+        <p class="muted">Member since {{.User.CreatedAt.Format "2 January 2006"}}</p>
+      </div>
+      <div class="namespace-card">
+        <span class="muted">Your namespace</span>
+        <code>{{.Host}}/{{.User.Username}}/</code>
+        <a class="security-link" href="/account/security">{{if .User.TwoFactor}}Security: two-factor on{{else}}Security: turn on two-factor{{end}} →</a>
+      </div>
+    </div>
+
+    {{with .Notice}}<p class="notice success" role="status">{{.}}</p>{{end}}
+    {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+
+    <div class="account-grid">
+      <section class="panel" aria-labelledby="email-title">
+        <div class="panel-head"><h2 id="email-title">Email</h2>
+          {{if .User.EmailVerified}}<span class="pill p-latest">Verified</span>{{else}}<span class="pill p-pre">Not verified</span>{{end}}
+        </div>
+        <div class="panel-body">
+          <p><strong>{{.User.Email}}</strong></p>
+          {{if .User.EmailVerified}}
+          <p class="muted">You can create API tokens and publish modules.</p>
+          {{else}}
+          <p class="muted">Open the link we emailed you to confirm this address. You need a confirmed email before you can create API tokens.</p>
+          <form action="/account/email/resend" method="post"><button class="btn btn-outline btn-sm" type="submit">Resend the link</button></form>
+          {{end}}
+        </div>
+      </section>
+
+      <section class="panel modules-panel" aria-labelledby="modules-title">
+        <div class="panel-head"><h2 id="modules-title">Your modules</h2><p>{{len .Modules}} you can publish</p></div>
+        {{if .Modules}}
+        <ul class="module-list">
+          {{range .Modules}}
+          <li>
+            <a href="{{projectURL $.ModuleHost .Path}}"><code>{{.Path}}</code></a>
+            <span class="muted">{{.Latest}} · {{.Versions}} version{{if ne .Versions 1}}s{{end}} · updated {{.PublishedAt.Format "2 Jan 2006"}}</span>
+          </li>
+          {{end}}
+        </ul>
+        {{else}}
+        <div class="panel-body publish-steps">
+          <p>You haven't published anything yet. From your module's folder:</p>
+          <ol>
+            <li>Install the CLI:
+              <pre>{{cliInstall}}</pre></li>
+            <li>Name the module under your namespace in <code>go.mod</code>:
+              <pre>module {{.Host}}/{{.User.Username}}/<span class="t-str">yourmodule</span></pre></li>
+            <li>Tag the release and publish it with an API token:
+              <pre>git tag v0.1.0
+gopherdex login --registry {{.SiteURL}}
+gopherdex publish</pre></li>
+          </ol>
+        </div>
+        {{end}}
+      </section>
+
+      <section class="panel orgs-panel" aria-labelledby="orgs-title">
+        <div class="panel-head"><h2 id="orgs-title">Organizations</h2><p>Shared namespaces for teams</p></div>
+        {{if .Memberships}}
+        <ul class="module-list">
+          {{range .Memberships}}<li><a href="/{{.Org}}"><code>{{$.Data.Host}}/{{.Org}}/</code></a><span class="muted">{{.Role}}</span></li>{{end}}
+        </ul>
+        {{end}}
+        {{if .User.EmailVerified}}
+        <form class="token-form org-form" action="/-/orgs" method="post">
+          <div class="field">
+            <label for="org-name">New organization</label>
+            <input id="org-name" name="org" type="text" maxlength="39" placeholder="acme" value="{{.OrgName}}" required autocapitalize="none" spellcheck="false"
+              {{with .Errors.org}}aria-invalid="true" aria-describedby="org-error"{{end}}>
+            {{with .Errors.org}}<p class="field-error" id="org-error">{{.}}</p>{{end}}
+          </div>
+          <div class="field">
+            <label for="org-display">Display name</label>
+            <input id="org-display" name="display_name" type="text" maxlength="100" placeholder="Acme Corp">
+          </div>
+          <button class="btn btn-primary" type="submit">Create</button>
+        </form>
+        {{end}}
+      </section>
+
+      <section class="panel tokens-panel" aria-labelledby="tokens-title">
+        <div class="panel-head"><h2 id="tokens-title">API tokens</h2><p>Used by <code>gopherdex publish</code></p></div>
+
+        {{with .NewToken}}
+        <div class="new-token" role="status">
+          <p><strong>Token “{{.Name}}” created.</strong> Copy it now. You won't be able to see it again.</p>
+          <div class="cmd"><code id="new-token">{{.Secret}}</code><button type="button" data-copy="{{.Secret}}">Copy</button></div>
+        </div>
+        {{end}}
+
+        {{if .User.EmailVerified}}
+        <form class="token-form" action="/account/tokens" method="post">
+          <div class="field">
+            <label for="token-name">Token name</label>
+            <input id="token-name" name="name" type="text" maxlength="64" placeholder="laptop, GitHub Actions…" value="{{.TokenName}}" required
+              {{with .Errors.name}}aria-invalid="true" aria-describedby="token-name-error"{{end}}>
+            {{with .Errors.name}}<p class="field-error" id="token-name-error">{{.}}</p>{{end}}
+          </div>
+          <div class="field">
+            <label for="token-module">Can publish</label>
+            <select id="token-module" name="module">
+              <option value="">All your modules</option>
+              {{range .Modules}}<option value="{{.Path}}">Only {{.Path}}</option>{{end}}
+            </select>
+          </div>
+          <div class="field">
+            <label for="token-expiry">Expires</label>
+            <select id="token-expiry" name="expires">
+              <option value="30">In 30 days</option>
+              <option value="90" selected>In 90 days</option>
+              <option value="365">In 1 year</option>
+              <option value="0">Never</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit">Create token</button>
+        </form>
+        {{end}}
+
+        {{if .Tokens}}
+        <div class="table-wrap">
+          <table class="tokens">
+            <thead><tr><th scope="col">Name</th><th scope="col">Token</th><th scope="col">Can publish</th><th scope="col">Last used</th><th scope="col">Expires</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+            <tbody>
+              {{range .Tokens}}
+              <tr>
+                <td>{{.Name}}</td>
+                <td><code>{{.Prefix}}…</code></td>
+                <td>{{if hasPrefix .Scope "module:"}}<code>{{trimPrefix .Scope "module:"}}</code>{{else}}All your modules{{end}}</td>
+                <td>{{with .LastUsedAt}}{{.Format "2 Jan 2006"}}{{else}}<span class="muted">Never</span>{{end}}</td>
+                <td>{{with .ExpiresAt}}{{.Format "2 Jan 2006"}}{{else}}<span class="muted">Never</span>{{end}}</td>
+                <td>
+                  <form action="/account/tokens/{{.ID}}/revoke" method="post">
+                    <button class="btn btn-danger-outline btn-sm" type="submit" aria-label="Revoke token {{.Name}}">Revoke</button>
+                  </form>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+        {{else if .User.EmailVerified}}
+        <p class="panel-empty muted">No active tokens yet.</p>
+        {{end}}
+      </section>
+
+      {{if .TrustedPublishing}}
+      <section class="panel publishing-panel" aria-labelledby="publishing-title">
+        <div class="panel-head"><h2 id="publishing-title">Publish from GitHub Actions</h2><p>Trusted publishing, no stored token</p></div>
+        <div class="panel-body">
+          <p class="muted">Set up a trusted publisher before a module's first release. After that, manage it on the module's Manage tab. For modules you already publish, add publishers there.</p>
+          {{if .Pending}}
+          <ul class="publisher-list">
+            {{range .Pending}}
+            <li>
+              <div>
+                <code>{{.ModulePath}}</code> <span class="pill p-pre">Waiting for first release</span>
+                <p class="muted small"><a href="{{.RepositoryURL}}" rel="nofollow noopener">{{.Repository}}</a> · {{.Workflow}}{{with .Environment}} · env: {{.}}{{end}}</p>
+              </div>
+              <form class="inline-form" action="/-/publishers/remove" method="post">
+                <input type="hidden" name="from" value="account"><input type="hidden" name="id" value="{{.ID}}">
+                <button class="btn btn-danger-outline btn-sm" type="submit" aria-label="Remove trusted publisher for {{.ModulePath}}">Remove</button>
+              </form>
+            </li>
+            {{end}}
+          </ul>
+          {{end}}
+          {{if .User.EmailVerified}}
+          <form class="stack-form publisher-form" action="/-/publishers" method="post">
+            <input type="hidden" name="from" value="account">
+            <div class="field">
+              <label for="pp-module">Module path</label>
+              <input id="pp-module" name="module" type="text" required maxlength="300" value="{{.Publisher.Module}}" placeholder="{{.Host}}/{{.User.Username}}/yourmodule" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="pp-repo">GitHub repository</label>
+                <input id="pp-repo" name="repository" type="text" required maxlength="200" value="{{.Publisher.Repository}}" placeholder="owner/yourmodule" autocapitalize="none" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="pp-workflow">Workflow file</label>
+                <input id="pp-workflow" name="workflow" type="text" required maxlength="200" value="{{.Publisher.Workflow}}" placeholder="release.yml" autocapitalize="none" spellcheck="false">
+              </div>
+              <div class="field">
+                <label for="pp-env">Environment <span class="muted">(optional)</span></label>
+                <input id="pp-env" name="environment" type="text" maxlength="255" value="{{.Publisher.Environment}}" placeholder="release" autocapitalize="none" spellcheck="false">
+              </div>
+            </div>
+            <button class="btn btn-primary" type="submit">Add pending publisher</button>
+          </form>
+          <details class="workflow-example">
+            <summary>Example workflow</summary>
+            <pre>{{template "workflowExample" .}}</pre>
+          </details>
+          {{end}}
+        </div>
+      </section>
+      {{end}}
+    </div>
+  </div>
+</section>
+{{end}}{{end}}

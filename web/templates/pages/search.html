@@ -1,0 +1,107 @@
+{{define "content"}}{{with .Data}}
+<section class="search-page">
+  <div class="wrap">
+    <form class="search search-wide" action="/search" method="get" role="search">
+      <label class="visually-hidden" for="q">Search Go modules</label>
+      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg>
+      <input id="q" name="q" type="search" value="{{.Query}}" placeholder="Search modules" autocomplete="off" spellcheck="false" maxlength="200">
+      {{with .License}}<input type="hidden" name="license" value="{{.}}">{{end}}
+      {{with .GoMax}}<input type="hidden" name="go" value="{{.}}">{{end}}
+      {{with .Updated}}<input type="hidden" name="updated" value="{{.}}">{{end}}
+      {{if .HideDeprecated}}<input type="hidden" name="hide_deprecated" value="1">{{end}}
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+
+    <div class="search-layout">
+      <form class="filters" id="filters" action="/search" method="get" aria-label="Filter modules">
+        <input type="hidden" name="q" value="{{.Query}}">
+        <input type="hidden" name="sort" value="{{.Sort}}">
+        <fieldset>
+          <legend>License</legend>
+          <label class="opt"><input type="radio" name="license" value=""{{if not .License}} checked{{end}}> Any</label>
+          {{range .Licenses}}<label class="opt"><input type="radio" name="license" value="{{.Value}}"{{if eq .Value $.Data.License}} checked{{end}}> {{.Value}} <span class="muted">{{.Count}}</span></label>{{end}}
+        </fieldset>
+        <fieldset>
+          <legend>Works with Go</legend>
+          <label class="visually-hidden" for="filter-go">Go version</label>
+          <select id="filter-go" name="go">
+            <option value="">Any version</option>
+            {{range .GoVersions}}<option value="{{.Value}}"{{if eq .Value $.Data.GoMax}} selected{{end}}>Go {{.Value}} or older</option>{{end}}
+          </select>
+          <p class="filter-help">Modules whose go.mod asks for this Go version or an older one.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Last release</legend>
+          <label class="opt"><input type="radio" name="updated" value=""{{if not .Updated}} checked{{end}}> Any time</label>
+          <label class="opt"><input type="radio" name="updated" value="month"{{if eq .Updated "month"}} checked{{end}}> Past 30 days</label>
+          <label class="opt"><input type="radio" name="updated" value="year"{{if eq .Updated "year"}} checked{{end}}> Past year</label>
+        </fieldset>
+        <fieldset>
+          <legend>Status</legend>
+          <label class="opt"><input type="checkbox" name="hide_deprecated" value="1"{{if .HideDeprecated}} checked{{end}}> Hide deprecated</label>
+        </fieldset>
+        <div class="filter-actions">
+          <button class="btn btn-primary btn-sm" type="submit">Apply filters</button>
+          {{if .Filtered}}<a href="/search?q={{.Query}}">Clear</a>{{end}}
+        </div>
+      </form>
+
+      <div class="search-results">
+        <div class="results-bar">
+          <h1 class="results-title">{{if .Query}}{{.Total}} result{{if ne .Total 1}}s{{end}} for “{{.Query}}”{{else}}{{.Total}} module{{if ne .Total 1}}s{{end}}{{end}}</h1>
+          <form action="/search" method="get" class="sort-form">
+            <input type="hidden" name="q" value="{{.Query}}">
+            {{with .License}}<input type="hidden" name="license" value="{{.}}">{{end}}
+            {{with .GoMax}}<input type="hidden" name="go" value="{{.}}">{{end}}
+            {{with .Updated}}<input type="hidden" name="updated" value="{{.}}">{{end}}
+            {{if .HideDeprecated}}<input type="hidden" name="hide_deprecated" value="1">{{end}}
+            <label for="sort">Sort by</label>
+            <select id="sort" name="sort">
+              {{if .Query}}<option value="relevance"{{if eq .Sort "relevance"}} selected{{end}}>Relevance</option>{{end}}
+              <option value="downloads"{{if eq .Sort "downloads"}} selected{{end}}>Most downloaded</option>
+              <option value="updated"{{if eq .Sort "updated"}} selected{{end}}>Recently updated</option>
+              <option value="new"{{if eq .Sort "new"}} selected{{end}}>Newest</option>
+            </select>
+            <noscript><button class="btn btn-outline btn-sm" type="submit">Sort</button></noscript>
+          </form>
+        </div>
+
+        {{if .Hits}}
+        <ol class="module-rows module-rows-wide">
+          {{range .Hits}}
+          <li>
+            <a class="module-row" href="{{projectURL $.Data.ModuleHost .Path}}">
+              <span class="row-top"><code class="row-name">{{breakable .Path}}</code><span class="pill p-version">{{.Version}}</span></span>
+              {{with .Synopsis}}<span class="row-syn">{{.}}</span>{{end}}
+              <span class="row-meta">
+                {{if .Deprecated}}<span class="pill p-retracted">Deprecated</span>{{end}}
+                @{{.Namespace}}
+                {{with .License}} · {{.}}{{end}}
+                {{with .GoVersion}} · go {{.}}{{end}}
+                · {{number .Downloads30}} download{{if ne .Downloads30 1}}s{{end}} this month
+                · released {{since .PublishedAt}}
+              </span>
+            </a>
+          </li>
+          {{end}}
+        </ol>
+        <nav class="pager" aria-label="Pages">
+          {{with .PrevURL}}<a class="btn btn-outline btn-sm" href="{{.}}">← Previous</a>{{else}}<span></span>{{end}}
+          <span class="muted">Page {{.Page}} of {{.Pages}}</span>
+          {{with .NextURL}}<a class="btn btn-outline btn-sm" href="{{.}}">Next →</a>{{else}}<span></span>{{end}}
+        </nav>
+        {{else}}
+        <p class="empty">{{if .Query}}No modules on Gopherdex match “{{.Query}}”{{if .Filtered}} with these filters{{end}}. Try a shorter or different word{{if .Filtered}}, or clear the filters{{end}}.{{else if .Filtered}}No modules match these filters.{{else}}No modules have been published yet. <a href="/signup">Create an account</a> to publish the first one.{{end}}</p>
+        {{end}}
+
+        {{if and .Query .Public}}
+        <div id="public-results" data-query="{{.Query}}" hidden>
+          <h2 class="public-title">More Go modules <span class="muted">from pkg.go.dev</span></h2>
+          <ol class="result-list" id="public-list"></ol>
+        </div>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</section>
+{{end}}{{end}}

@@ -1,0 +1,39 @@
+{{define "content"}}{{with .Data}}
+<section class="account">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker">Browse</p>
+        <h1 class="browse-title">All modules</h1>
+        <p class="muted">{{.Total}} module{{if ne .Total 1}}s{{end}} on Gopherdex, most recently updated first.</p>
+      </div>
+      <form class="search search-small" action="/" method="get" role="search">
+        <label class="visually-hidden" for="browse-q">Search modules</label>
+        <input id="browse-q" name="q" type="search" placeholder="Search modules" maxlength="200">
+        <button class="btn btn-primary btn-sm" type="submit">Search</button>
+      </form>
+    </div>
+
+    {{if .Modules}}
+    <ol class="module-rows module-rows-wide">
+      {{range .Modules}}
+      <li>
+        <a class="module-row" href="{{projectURL $.ModuleHost .Path}}">
+          <span class="row-top"><code class="row-name">{{.Path}}</code><span class="pill p-version">{{.Version}}</span></span>
+          {{with .Synopsis}}<span class="row-syn">{{.}}</span>{{end}}
+          <span class="row-meta">@{{.Namespace}} · released {{since .PublishedAt}}</span>
+        </a>
+      </li>
+      {{end}}
+    </ol>
+    <nav class="pager" aria-label="Pages">
+      {{if .PrevPage}}<a class="btn btn-outline btn-sm" href="/modules?page={{.PrevPage}}">← Newer</a>{{else}}<span></span>{{end}}
+      <span class="muted">Page {{.Page}} of {{.Pages}}</span>
+      {{if .NextPage}}<a class="btn btn-outline btn-sm" href="/modules?page={{.NextPage}}">Older →</a>{{else}}<span></span>{{end}}
+    </nav>
+    {{else}}
+    <p class="empty">No modules have been published yet. <a href="/signup">Create an account</a> to publish the first one.</p>
+    {{end}}
+  </div>
+</section>
+{{end}}{{end}}

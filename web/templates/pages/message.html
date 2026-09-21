@@ -1,0 +1,12 @@
+{{define "content"}}{{with .Data}}
+<section class="auth">
+  <div class="wrap">
+    <div class="message-card">
+      <p class="kicker">{{.Kicker}}</p>
+      <h1>{{.Heading}}</h1>
+      <p class="sub">{{.Body}}</p>
+      <a class="btn btn-primary" href="{{.ActionURL}}">{{.ActionLabel}}</a>
+    </div>
+  </div>
+</section>
+{{end}}{{end}}

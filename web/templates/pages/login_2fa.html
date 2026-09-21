@@ -1,0 +1,22 @@
+{{define "content"}}{{with .Data}}
+<section class="auth">
+  <div class="wrap auth-grid">
+    <div class="auth-intro">
+      <p class="kicker">Two-factor authentication</p>
+      <h1>Enter your code.</h1>
+      <p class="sub">Open your authenticator app and enter the 6-digit code for Gopherdex. Lost your phone? Use one of your recovery codes instead.</p>
+    </div>
+    <form class="form-card" action="/login/2fa" method="post">
+      {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+      <input type="hidden" name="next" value="{{.Next}}">
+      <div class="field">
+        <label for="code">Authentication code</label>
+        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required maxlength="20" autofocus
+          autocapitalize="none" spellcheck="false" placeholder="123456">
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Verify</button>
+      <p class="form-foot"><a href="/login">Start over</a></p>
+    </form>
+  </div>
+</section>
+{{end}}{{end}}

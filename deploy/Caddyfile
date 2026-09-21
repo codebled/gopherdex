@@ -1,0 +1,11 @@
+# Caddy gets and renews the HTTPS certificate for the domain by itself.
+# The go command needs the registry on the standard HTTPS port for
+# zero-setup "go get <domain>/<owner>/<module>".
+{$GOPHERDEX_DOMAIN} {
+	encode zstd gzip
+	# Module zips can be large; the registry enforces -max-upload itself.
+	request_body {
+		max_size 64MB
+	}
+	reverse_proxy gopherdex:8080
+}

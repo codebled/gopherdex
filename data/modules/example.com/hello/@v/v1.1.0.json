@@ -1,0 +1,9 @@
+{
+  "Time": "2026-05-18T14:40:00Z",
+  "Origin": {
+    "VCS": "git",
+    "URL": "https://example.com/hello.git",
+    "Hash": "9b2e61c04d7a83f5e2b1c9d0a4f3e7b6c5d8a291",
+    "Ref": "refs/tags/v1.1.0"
+  }
+}

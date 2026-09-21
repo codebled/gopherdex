@@ -1,0 +1,27 @@
+{{define "content"}}{{with .Data}}
+<section class="auth">
+  <div class="wrap auth-grid">
+    <div class="auth-intro">
+      <p class="kicker">Welcome back</p>
+      <h1>Sign in to Gopherdex.</h1>
+      <p class="sub">Manage the modules you publish, your API tokens and your account security.</p>
+    </div>
+
+    <form class="form-card" action="/login" method="post" novalidate>
+      {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+      <input type="hidden" name="next" value="{{.Next}}">
+      <div class="field">
+        <label for="login">Username or email</label>
+        <input id="login" name="login" type="text" value="{{.Login}}" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="254">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+        <p class="field-help"><a href="/forgot-password">Forgot your password?</a></p>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      <p class="form-foot">New to Gopherdex? <a href="/signup">Create an account</a></p>
+    </form>
+  </div>
+</section>
+{{end}}{{end}}

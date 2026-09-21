@@ -1,0 +1,68 @@
+{{define "content"}}{{with .Data}}
+<section class="account">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker">Admin</p>
+        <h1>Review queue</h1>
+        <p class="muted">{{len .Reports}} open report{{if ne (len .Reports) 1}}s{{end}} · {{len .Quarantined}} quarantined module{{if ne (len .Quarantined) 1}}s{{end}}</p>
+      </div>
+    </div>
+    {{with .Notice}}<p class="notice success" role="status">{{.}}</p>{{end}}
+    {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+
+    <section class="panel" aria-labelledby="reports-title">
+      <div class="panel-head"><h2 id="reports-title">Open reports</h2><p>Oldest first</p></div>
+      {{if .Reports}}
+      <ul class="report-list">
+        {{range .Reports}}
+        <li>
+          <div class="report-head">
+            <span class="pill {{if eq .Category "malware"}}p-retracted{{else}}p-pre{{end}}">{{.Category}}</span>
+            <code>{{.Module}}</code>
+            <span class="muted">reported by @{{.Reporter}} · {{since .CreatedAt}}</span>
+          </div>
+          <p class="report-details">{{.Details}}</p>
+          <div class="report-actions">
+            <form class="inline-form" action="/-/admin/quarantine" method="post">
+              <input type="hidden" name="module" value="{{.Module}}">
+              <label class="visually-hidden" for="reason-{{.ID}}">Reason, sent to the owners</label>
+              <input id="reason-{{.ID}}" name="reason" type="text" required maxlength="500" placeholder="Reason, sent to the owners">
+              <button class="btn btn-danger-outline btn-sm" type="submit">Quarantine module</button>
+            </form>
+            <form class="inline-form" action="/-/admin/dismiss" method="post">
+              <input type="hidden" name="report" value="{{.ID}}">
+              <label class="visually-hidden" for="note-{{.ID}}">Note (optional)</label>
+              <input id="note-{{.ID}}" name="note" type="text" maxlength="500" placeholder="Note (optional)">
+              <button class="btn btn-outline btn-sm" type="submit">Dismiss</button>
+            </form>
+          </div>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="panel-empty muted">No open reports.</p>
+      {{end}}
+    </section>
+
+    <section class="panel admin-quarantine" aria-labelledby="quarantine-title">
+      <div class="panel-head"><h2 id="quarantine-title">Quarantined modules</h2><p>Hidden from pages, search and go get</p></div>
+      {{if .Quarantined}}
+      <ul class="collab-list">
+        {{range .Quarantined}}
+        <li>
+          <span><code>{{.Path}}</code> <span class="muted">since {{.Since.Format "2 Jan 2006"}} · {{.Reason}}</span></span>
+          <form class="inline-form" action="/-/admin/release" method="post">
+            <input type="hidden" name="module" value="{{.Path}}">
+            <button class="btn btn-outline btn-sm" type="submit">Release</button>
+          </form>
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="panel-empty muted">Nothing is quarantined.</p>
+      {{end}}
+    </section>
+  </div>
+</section>
+{{end}}{{end}}

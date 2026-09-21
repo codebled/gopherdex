@@ -1,0 +1,367 @@
+{{define "content"}}{{with .Data}}
+<section class="project" aria-labelledby="project-title">
+  <div class="project-head">
+    <div class="wrap">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/">{{.ModuleHost}}</a><span aria-hidden="true">/</span><a href="/{{.Namespace}}">{{.Namespace}}</a><span aria-hidden="true">/</span>
+      </nav>
+      <div class="project-title">
+        <div class="project-name">
+          <h1 id="project-title">{{.Name}}{{with .Major}}<span class="major">/{{.}}</span>{{end}} <span class="title-version">{{.Version}}</span></h1>
+          {{with .Synopsis}}<p class="project-synopsis">{{.}}</p>{{end}}
+          <p class="project-path"><code>{{.Path}}</code></p>
+        </div>
+        <div class="install-box">
+          <div class="cmd"><code>{{.Install}}</code><button type="button" data-copy="{{.Install}}">Copy</button></div>
+          <p class="install-meta">
+            {{if .IsLatest}}<span class="pill p-latest">Latest version</span>{{else}}<a class="newer" href="{{.URL}}">Newer version available: {{.Latest}} →</a>{{end}}
+            <span class="muted">Released {{.Detail.PublishedAt.Format "2 Jan 2006"}}</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    {{with .Notice}}<p class="notice success" role="status">{{.}}</p>{{end}}
+    {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+    {{if .DeprecationNotice}}
+    <p class="notice danger" role="alert"><strong>Deprecated.</strong> {{.DeprecationNotice}}{{with .Successor}} Use {{if $.Data.SuccessorURL}}<a href="{{$.Data.SuccessorURL}}">{{.}}</a>{{else}}<code>{{.}}</code>{{end}} instead.{{end}}</p>
+    {{else if .Deprecated}}
+    <p class="notice danger" role="alert"><strong>Deprecated.</strong> {{.Deprecated}}</p>
+    {{end}}
+    {{if .AllYanked}}
+    <p class="notice danger" role="alert"><strong>Every version of this module has been yanked.</strong> New installs won't find it; builds that already use a version keep working.</p>
+    {{else if .Yanked}}
+    <p class="notice danger" role="alert"><strong>{{.Version}} was yanked by its maintainers.</strong> {{with .YankReason}}{{.}} {{end}}Builds that already use it keep working, but new installs skip it. Use <a href="{{.URL}}">{{.Latest}}</a> instead.</p>
+    {{end}}
+    {{with .Retracted}}<p class="notice danger" role="alert"><strong>{{$.Data.Version}} is retracted by its author.</strong> {{if .Rationale}}{{.Rationale}} {{end}}Use {{$.Data.Latest}} instead.</p>{{end}}
+
+    <div class="project-grid">
+      <aside class="project-side">
+        <nav class="side-tabs" aria-label="Project sections">
+          <a href="{{.VersionURL}}"{{if eq .Tab ""}} aria-current="page"{{end}}>Description</a>
+          <a href="{{.VersionURL}}?tab=docs"{{if eq .Tab "docs"}} aria-current="page"{{end}}>Documentation <span>{{len .Packages}}</span></a>
+          <a href="{{.VersionURL}}?tab=versions"{{if eq .Tab "versions"}} aria-current="page"{{end}}>Release history <span>{{len .Versions}}</span></a>
+          <a href="{{.VersionURL}}?tab=files"{{if eq .Tab "files"}} aria-current="page"{{end}}>Download files</a>
+          {{if .CanManage}}<a class="manage-link" href="{{.URL}}?tab=manage"{{if eq .Tab "manage"}} aria-current="page"{{end}}>Manage <span>{{.Role}}</span></a>{{end}}
+        </nav>
+
+        <section class="side-block" aria-labelledby="downloads-title">
+          <h2 id="downloads-title">Downloads</h2>
+          <dl class="dl-stats">
+            <div><dt>Last day</dt><dd>{{number .Downloads.LastDay}}</dd></div>
+            <div><dt>Last week</dt><dd>{{number .Downloads.LastWeek}}</dd></div>
+            <div><dt>Last month</dt><dd>{{number .Downloads.LastMonth}}</dd></div>
+          </dl>
+          <svg class="dl-chart" viewBox="0 0 {{.Chart.Width}} {{.Chart.Height}}" preserveAspectRatio="none" role="img" aria-label="{{.Chart.Summary}}">
+            <line class="dl-base" x1="0" y1="{{.Chart.Height}}" x2="{{.Chart.Width}}" y2="{{.Chart.Height}}"/>
+            {{range .Chart.Bars}}<rect class="dl-bar" x="{{.X}}" y="{{.Y}}" width="{{.W}}" height="{{.H}}"><title>{{.Label}}</title></rect>{{end}}
+          </svg>
+          <p class="dl-note">Zips served by this registry, last 30 days. Downloads served from the public Go mirror's cache aren't counted.</p>
+        </section>
+
+        {{with .Detail.Provenance}}
+        <section class="side-block provenance" aria-labelledby="prov-title">
+          <h2 id="prov-title">Verified source</h2>
+          <p class="prov-note">Uploaded by a GitHub Actions run through a trusted publisher. Gopherdex checked the run's identity with GitHub; the details below aren't self-reported.</p>
+          <dl>
+            <dt>Repository</dt><dd><a href="{{.RepositoryURL}}" rel="nofollow noopener">{{.Repository}}</a></dd>
+            <dt>Workflow</dt><dd><a href="{{.WorkflowURL}}" rel="nofollow noopener">{{.Workflow}}</a></dd>
+            {{with .Environment}}<dt>Environment</dt><dd>{{.}}</dd>{{end}}
+            {{if .SHA}}<dt>Commit</dt><dd><a href="{{.CommitURL}}" rel="nofollow noopener"><code>{{short .SHA 7}}</code></a></dd>{{end}}
+            {{with .Ref}}<dt>Ref</dt><dd><code>{{.}}</code></dd>{{end}}
+            {{if .RunURL}}<dt>Run</dt><dd><a href="{{.RunURL}}" rel="nofollow noopener">#{{.RunID}}</a></dd>{{end}}
+          </dl>
+        </section>
+        {{end}}
+
+        <section class="side-block" aria-labelledby="meta-title">
+          <h2 id="meta-title">Meta</h2>
+          <dl>
+            <dt>License</dt>
+            <dd>{{if .Licenses}}{{join .Licenses ", "}}{{else if .LicenseFile}}<span class="warn">Not recognized</span>{{else}}<span class="warn">None found</span>{{end}}</dd>
+            {{if .Org}}
+            <dt>Organization</dt><dd><a href="/{{.Namespace}}">{{with .Org.DisplayName}}{{.}}{{else}}@{{$.Data.Namespace}}{{end}}</a></dd>
+            {{end}}
+            {{if .Collaborators}}
+            <dt>Owners</dt><dd>{{range $i, $c := .Collaborators}}{{if eq $c.Role "owner"}}{{if $i}} {{end}}<a href="/{{$c.Username}}">@{{$c.Username}}</a>{{end}}{{end}}</dd>
+            {{else if not .Org}}
+            <dt>Owner</dt><dd><a href="/{{.Namespace}}">@{{.Namespace}}</a></dd>
+            {{end}}
+            {{if .Detail.Provenance}}<dt>Published by</dt><dd>GitHub Actions{{with .Detail.PublishedBy}}, set up by @{{.}}{{end}}</dd>
+            {{else}}{{with .Detail.PublishedBy}}<dt>Published by</dt><dd>@{{.}}</dd>{{end}}{{end}}
+            {{with .GoVersion}}<dt>Go</dt><dd>{{.}}</dd>{{end}}
+            <dt>Requires</dt><dd>{{len .Requires}} module{{if ne (len .Requires) 1}}s{{end}}</dd>
+            <dt>Size</dt><dd>{{.FilesCount}} files, {{bytes .Detail.Size}} zipped</dd>
+          </dl>
+        </section>
+
+        <section class="side-block" aria-labelledby="links-title">
+          <h2 id="links-title">Links</h2>
+          <ul class="side-links">
+            {{with .RepoURL}}<li><a href="{{.}}" rel="nofollow ugc noopener">Repository</a></li>{{end}}
+            {{with .TagURL}}<li><a href="{{.}}" rel="nofollow ugc noopener">Source at {{$.Data.Version}}</a></li>{{end}}
+            <li><a href="{{.VersionURL}}?tab=docs">Package documentation</a></li>
+            <li><a href="{{.ModURL}}">go.mod</a></li>
+            <li><a class="report-link" href="/report?module={{.Path}}">Report this module</a></li>
+          </ul>
+        </section>
+
+        {{if .MajorVersions}}
+        <section class="side-block" aria-labelledby="majors-title">
+          <h2 id="majors-title">Major versions</h2>
+          <ul class="side-links">
+            {{range .MajorVersions}}<li>{{if .Current}}<strong>{{.Label}}</strong> <span class="muted">(this page)</span>{{else}}<a href="{{.URL}}">{{.Label}}</a>{{end}}</li>{{end}}
+          </ul>
+        </section>
+        {{end}}
+      </aside>
+
+      <div class="project-main">
+        {{if eq .Tab ""}}
+          <h2 class="tab-title">Project description</h2>
+          {{if .Readme}}
+          <article class="markdown-body">{{.Readme}}</article>
+          {{else}}
+          <p class="empty">{{.Path}}@{{.Version}} has no README. Add a README.md to the module root and publish a new version.</p>
+          {{end}}
+
+        {{else if eq .Tab "docs"}}
+          <h2 class="tab-title">Documentation</h2>
+          {{with .DocsError}}<p class="notice">{{.}}</p>{{end}}
+          {{if .Packages}}
+          <nav class="pkg-index" aria-label="Packages">
+            <ul>
+              {{range .Packages}}<li><a href="#{{pkgID $.Data.Path .ImportPath}}"><code>{{relPath $.Data.Path .ImportPath}}</code></a> <span class="muted">{{.Synopsis}}</span></li>{{end}}
+            </ul>
+          </nav>
+          {{range .Packages}}
+          <section class="pkg-doc" id="{{pkgID $.Data.Path .ImportPath}}">
+            <h3><code>{{.ImportPath}}</code></h3>
+            <div class="doc-text">{{range docBlocks .Doc}}{{if .Code}}<pre>{{.Text}}</pre>{{else}}<p>{{.Text}}</p>{{end}}{{end}}</div>
+            {{if .Funcs}}
+            <h4>Functions</h4>
+            {{range .Funcs}}<div class="sym"><pre>{{.Decl}}</pre><div class="doc-text">{{range docBlocks .Doc}}{{if .Code}}<pre>{{.Text}}</pre>{{else}}<p>{{.Text}}</p>{{end}}{{end}}</div></div>{{end}}
+            {{end}}
+            {{if .Types}}
+            <h4>Types</h4>
+            {{range .Types}}
+            <div class="sym">
+              <pre>{{.Decl}}</pre>
+              <div class="doc-text">{{range docBlocks .Doc}}{{if .Code}}<pre>{{.Text}}</pre>{{else}}<p>{{.Text}}</p>{{end}}{{end}}</div>
+              {{range .Funcs}}<div class="sym"><pre>{{.Decl}}</pre><div class="doc-text">{{range docBlocks .Doc}}<p>{{.Text}}</p>{{end}}</div></div>{{end}}
+              {{range .Methods}}<div class="sym"><pre>{{.Decl}}</pre><div class="doc-text">{{range docBlocks .Doc}}<p>{{.Text}}</p>{{end}}</div></div>{{end}}
+            </div>
+            {{end}}
+            {{end}}
+          </section>
+          {{end}}
+          {{else if not .DocsError}}
+          <p class="empty">This version has no Go packages to document.</p>
+          {{end}}
+          {{if .Requires}}
+          <h3 class="sub-title">Dependencies</h3>
+          <ul class="req-list">{{range .Requires}}<li><code>{{.Path}}</code> <span class="muted">{{.Version}}{{if .Indirect}} · indirect{{end}}</span></li>{{end}}</ul>
+          {{end}}
+
+        {{else if eq .Tab "versions"}}
+          <h2 class="tab-title">Release history</h2>
+          <div class="table-wrap">
+            <table class="releases">
+              <thead><tr><th scope="col">Version</th><th scope="col">Released</th><th scope="col">Published by</th><th scope="col">Commit</th><th scope="col">Downloads</th></tr></thead>
+              <tbody>
+                {{range .Versions}}
+                <tr{{if eq .Version $.Data.Version}} aria-current="true"{{end}}>
+                  <td>
+                    <a class="rel-version" href="{{.URL}}">{{.Version}}</a>
+                    {{if eq .Version $.Data.Latest}}<span class="pill p-latest">Latest</span>{{end}}
+                    {{if .Prerelease}}<span class="pill p-pre">Pre-release</span>{{end}}
+                    {{if .Retracted}}<span class="pill p-retracted">Retracted</span>{{end}}
+                    {{if .Yanked}}<span class="pill p-retracted">Yanked</span>{{end}}
+                    {{if .RetractRationale}}<p class="rel-note">{{.RetractRationale}}</p>{{end}}
+                    {{if .YankReason}}<p class="rel-note">Yanked: {{.YankReason}}</p>{{end}}
+                  </td>
+                  <td>{{.PublishedAt.Format "2 Jan 2006"}}<br><span class="muted">{{since .PublishedAt}}</span></td>
+                  <td>{{if .Provenance}}{{if .Provenance.RunURL}}<a href="{{.Provenance.RunURL}}" rel="nofollow noopener">GitHub Actions</a>{{else}}GitHub Actions{{end}}<br><span class="muted">{{.Provenance.Repository}}</span>{{else}}{{with .PublishedBy}}@{{.}}{{else}}<span class="muted">—</span>{{end}}{{end}}</td>
+                  <td>{{with .Commit}}<code>{{short . 7}}</code>{{else}}<span class="muted">—</span>{{end}}</td>
+                  <td class="num">{{number (index $.Data.Downloads.ByVersion .Version)}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+
+        {{else if eq .Tab "manage"}}
+          <h2 class="tab-title">Manage {{.Name}}{{with .Major}}/{{.}}{{end}}</h2>
+          <p class="muted">You're {{if eq .Role "owner"}}an owner{{else}}a maintainer{{end}} of <code>{{.Path}}</code>.{{if not .IsOwner}} Maintainers can publish and yank releases; owners manage deprecation and access.{{end}}</p>
+
+          <section class="manage-block" aria-labelledby="yank-title">
+            <h3 id="yank-title">Releases</h3>
+            <p class="muted">Yanking hides a release from new installs and <code>@latest</code> on Gopherdex. Its files stay downloadable, so builds that already use it keep working. To warn people who install through the public Go module mirror too, add <code>retract vX.Y.Z</code> to go.mod and publish a new version.</p>
+            <div class="table-wrap">
+              <table class="releases manage-table">
+                <thead><tr><th scope="col">Version</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+                <tbody>
+                  {{range .Versions}}
+                  <tr>
+                    <td><a class="rel-version" href="{{.URL}}">{{.Version}}</a></td>
+                    <td>{{if .Yanked}}<span class="pill p-retracted">Yanked</span>{{with .YankReason}} <span class="muted">{{.}}</span>{{end}}{{else if eq .Version $.Data.Latest}}<span class="pill p-latest">Latest</span>{{else}}<span class="muted">Available</span>{{end}}</td>
+                    <td>
+                      {{if .Yanked}}
+                      <form class="inline-form" action="/-/unyank" method="post">
+                        <input type="hidden" name="module" value="{{$.Data.Path}}"><input type="hidden" name="version" value="{{.Version}}">
+                        <button class="btn btn-outline btn-sm" type="submit">Restore</button>
+                      </form>
+                      {{else}}
+                      <form class="inline-form" action="/-/yank" method="post">
+                        <input type="hidden" name="module" value="{{$.Data.Path}}"><input type="hidden" name="version" value="{{.Version}}">
+                        <label class="visually-hidden" for="reason-{{.Version}}">Reason for yanking {{.Version}}</label>
+                        <input id="reason-{{.Version}}" name="reason" type="text" maxlength="500" placeholder="Reason (optional)">
+                        <button class="btn btn-danger-outline btn-sm" type="submit">Yank</button>
+                      </form>
+                      {{end}}
+                    </td>
+                  </tr>
+                  {{end}}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {{if .IsOwner}}
+          <section class="manage-block" aria-labelledby="deprecate-title">
+            <h3 id="deprecate-title">Deprecation</h3>
+            {{if .DeprecationNotice}}
+            <p>This module is marked deprecated: <em>{{.DeprecationNotice}}</em>{{with .Successor}} (replacement: <code>{{.}}</code>){{end}}</p>
+            <form action="/-/undeprecate" method="post">
+              <input type="hidden" name="module" value="{{.Path}}">
+              <button class="btn btn-outline btn-sm" type="submit">Remove the deprecation</button>
+            </form>
+            {{else}}
+            <p class="muted">Tell people to stop using this module. The notice shows on its page and in search. The go command only reports deprecations written as <code>// Deprecated:</code> in go.mod, so add that in your next release too.</p>
+            <form class="stack-form" action="/-/deprecate" method="post">
+              <input type="hidden" name="module" value="{{.Path}}">
+              <div class="field">
+                <label for="dep-message">Message</label>
+                <input id="dep-message" name="message" type="text" maxlength="500" required placeholder="No longer maintained. Use the v2 module instead.">
+              </div>
+              <div class="field">
+                <label for="dep-successor">Replacement module (optional)</label>
+                <input id="dep-successor" name="successor" type="text" maxlength="300" placeholder="{{.ModuleHost}}/{{.Namespace}}/{{.Name}}/v2">
+              </div>
+              <button class="btn btn-danger-outline" type="submit">Mark deprecated</button>
+            </form>
+            {{end}}
+          </section>
+
+          <section class="manage-block" aria-labelledby="access-title">
+            <h3 id="access-title">Access</h3>
+            {{if .Org}}<p class="muted">Members of <a href="/{{.Namespace}}">@{{.Namespace}}</a> maintain this module and its owners own it. People added here get access to this module only.</p>{{end}}
+            {{if .Collaborators}}
+            <ul class="collab-list">
+              {{range .Collaborators}}
+              <li>
+                <span><a href="/{{.Username}}">@{{.Username}}</a> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span></span>
+                <form class="inline-form" action="/-/collaborators/remove" method="post">
+                  <input type="hidden" name="module" value="{{$.Data.Path}}"><input type="hidden" name="username" value="{{.Username}}">
+                  <button class="btn btn-link" type="submit" aria-label="Remove @{{.Username}}">Remove</button>
+                </form>
+              </li>
+              {{end}}
+            </ul>
+            {{end}}
+            <form class="inline-form add-collab" action="/-/collaborators" method="post">
+              <input type="hidden" name="module" value="{{.Path}}">
+              <label class="visually-hidden" for="collab-user">Username</label>
+              <input id="collab-user" name="username" type="text" required placeholder="@username" autocapitalize="none" spellcheck="false">
+              <label class="visually-hidden" for="collab-role">Role</label>
+              <select id="collab-role" name="role"><option value="maintainer">Maintainer</option><option value="owner">Owner</option></select>
+              <button class="btn btn-primary btn-sm" type="submit">Add or update</button>
+            </form>
+            <p class="muted small">To hand this module to someone else, add them as an owner, then remove yourself. The module path stays <code>{{.Path}}</code>, because every program that imports it depends on that path.</p>
+          </section>
+
+          {{if .TrustedPublishing}}
+          <section class="manage-block" aria-labelledby="publishers-title">
+            <h3 id="publishers-title">Trusted publishers</h3>
+            <p class="muted">Let a GitHub Actions workflow publish releases without an API token. When the workflow runs <code>gopherdex publish</code>, it proves who it is with a GitHub ID token and receives a token that works for 15 minutes and only for this module. Releases it uploads show which run built them.</p>
+            {{if .Publishers}}
+            <ul class="publisher-list">
+              {{range .Publishers}}
+              <li>
+                <div>
+                  <a href="{{.RepositoryURL}}" rel="nofollow noopener"><code>{{.Repository}}</code></a>
+                  <span class="muted">·</span> <a href="{{.WorkflowURL}}" rel="nofollow noopener"><code>{{.Workflow}}</code></a>
+                  {{with .Environment}}<span class="pill p-version">env: {{.}}</span>{{end}}
+                  <p class="muted small">Added by @{{.CreatedBy}} on {{.CreatedAt.Format "2 Jan 2006"}} · {{with .LastUsedAt}}last used {{since .}}{{else}}not used yet{{end}}</p>
+                </div>
+                <form class="inline-form" action="/-/publishers/remove" method="post">
+                  <input type="hidden" name="module" value="{{$.Data.Path}}"><input type="hidden" name="id" value="{{.ID}}">
+                  <button class="btn btn-danger-outline btn-sm" type="submit" aria-label="Remove trusted publisher {{.Repository}} {{.Workflow}}">Remove</button>
+                </form>
+              </li>
+              {{end}}
+            </ul>
+            {{end}}
+            <form class="stack-form publisher-form" action="/-/publishers" method="post">
+              <input type="hidden" name="module" value="{{.Path}}">
+              <div class="field-row">
+                <div class="field">
+                  <label for="pub-repo">GitHub repository</label>
+                  <input id="pub-repo" name="repository" type="text" required maxlength="200" placeholder="owner/{{.Name}}" autocapitalize="none" spellcheck="false">
+                </div>
+                <div class="field">
+                  <label for="pub-workflow">Workflow file</label>
+                  <input id="pub-workflow" name="workflow" type="text" required maxlength="200" placeholder="release.yml" autocapitalize="none" spellcheck="false">
+                </div>
+                <div class="field">
+                  <label for="pub-env">Environment <span class="muted">(optional)</span></label>
+                  <input id="pub-env" name="environment" type="text" maxlength="255" placeholder="release" autocapitalize="none" spellcheck="false">
+                </div>
+              </div>
+              <p class="field-help">With an environment, only jobs in that GitHub environment can publish. Protect it with required reviewers to approve each release.</p>
+              <button class="btn btn-primary" type="submit">Add trusted publisher</button>
+            </form>
+            <details class="workflow-example">
+              <summary>Example workflow</summary>
+              <pre>{{template "workflowExample" .}}</pre>
+            </details>
+          </section>
+          {{end}}
+          {{end}}
+
+        {{else}}
+          <h2 class="tab-title">Download files</h2>
+          <p class="muted">The go command downloads and verifies these files itself. They're listed here so you can audit what {{.Version}} contains.</p>
+          <div class="file-card">
+            <div class="file-row">
+              <a class="file-name" href="{{.ZipURL}}">{{.Name}}@{{.Version}}.zip</a>
+              <span class="muted">Module source · {{bytes .Detail.Size}} · {{.FilesCount}} files</span>
+            </div>
+            <dl class="hashes">
+              <dt>SHA-256</dt><dd><code>{{.Detail.SHA256}}</code></dd>
+              <dt>Go checksum</dt><dd><code>{{.Detail.H1}}</code></dd>
+            </dl>
+          </div>
+          <div class="file-card">
+            <div class="file-row">
+              <a class="file-name" href="{{.ModURL}}">go.mod</a>
+              <span class="muted">Module definition{{with .GoVersion}} · go {{.}}{{end}}</span>
+            </div>
+            <dl class="hashes">
+              <dt>Go checksum</dt><dd><code>{{.Detail.GoModH1}}</code></dd>
+            </dl>
+          </div>
+          <h3 class="sub-title">go.sum lines</h3>
+          <p class="muted">What <code>go get</code> writes to go.sum for this version. The checksums match the ones recorded when it was published.</p>
+          <div class="gosum">
+            <pre>{{range .GoSum}}{{.}}
+{{end}}</pre>
+          </div>
+        {{end}}
+      </div>
+    </div>
+  </div>
+</section>
+{{end}}{{end}}

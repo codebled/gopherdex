@@ -1,0 +1,39 @@
+{{define "content"}}{{with .Data}}
+<section class="auth">
+  <div class="wrap auth-grid">
+    <div class="auth-intro">
+      <p class="kicker">Create an account</p>
+      <h1>Publish Go modules under your own name.</h1>
+      <p class="sub">Your username becomes your namespace. Every module you publish lives under it.</p>
+      <div class="namespace-preview" aria-live="polite">
+        <span class="muted">Your modules will install as</span>
+        <code><span>{{.Host}}/</span><strong id="ns-preview">{{if .Username}}{{.Username}}{{else}}your-name{{end}}</strong><span>/module</span></code>
+      </div>
+    </div>
+
+    <form class="form-card" action="/signup" method="post" novalidate>
+      {{with .Errors.form}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" value="{{.Username}}" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="2" maxlength="39" data-namespace-input
+          {{with .Errors.username}}aria-invalid="true" aria-describedby="username-error"{{else}}aria-describedby="username-help"{{end}}>
+        {{with .Errors.username}}<p class="field-error" id="username-error">{{.}}</p>{{else}}<p class="field-help" id="username-help">Lower-case letters, digits and single hyphens. You can't change it later.</p>{{end}}
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" value="{{.Email}}" autocomplete="email" required maxlength="254"
+          {{with .Errors.email}}aria-invalid="true" aria-describedby="email-error"{{else}}aria-describedby="email-help"{{end}}>
+        {{with .Errors.email}}<p class="field-error" id="email-error">{{.}}</p>{{else}}<p class="field-help" id="email-help">We'll send a link to confirm it. You need a confirmed email to publish.</p>{{end}}
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" maxlength="256"
+          {{with .Errors.password}}aria-invalid="true" aria-describedby="password-error"{{else}}aria-describedby="password-help"{{end}}>
+        {{with .Errors.password}}<p class="field-error" id="password-error">{{.}}</p>{{else}}<p class="field-help" id="password-help">At least 10 characters.</p>{{end}}
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Create account</button>
+      <p class="form-foot">Already have an account? <a href="/login">Sign in</a></p>
+    </form>
+  </div>
+</section>
+{{end}}{{end}}

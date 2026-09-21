@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	xmodule "golang.org/x/mod/module"
 
@@ -48,25 +49,57 @@ func (r *Registry) runChecks(ctx context.Context, u Upload, namespace string) ([
 
 // popularNames lists owner/name of the most downloaded modules outside
 // namespace, for typosquatting checks.
+//
+// Ranking every module by downloads takes a pass over the whole registry,
+// so on a large registry the ranking is cached for popularTTL and filtered
+// per namespace here. It fetches twice the limit so one busy namespace
+// can't crowd out the rest.
 func (r *Registry) popularNames(ctx context.Context, namespace string, limit int) ([]string, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT m.path FROM modules m LEFT JOIN downloads d ON d.module_id = m.id
-		WHERE m.namespace != ? AND m.quarantined_at IS NULL
-		GROUP BY m.id ORDER BY COALESCE(SUM(d.count), 0) DESC, m.id LIMIT ?`, namespace, limit)
-	if err != nil {
-		return nil, fmt.Errorf("popular modules: %w", err)
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var p string
-		if err := rows.Scan(&p); err != nil {
+	r.popularMu.Lock()
+	defer r.popularMu.Unlock()
+	// A short ranking means a small registry: the query is cheap there, and
+	// a module published a moment ago must count, so don't reuse it.
+	// Freshness is measured in real time, not r.now(): imports and tests
+	// set the registry's clock to when each version was published.
+	if len(r.popular) < 2*limit || time.Since(r.popularAt) >= popularTTL {
+		rows, err := r.DB.QueryContext(ctx, `SELECT m.namespace, m.path FROM modules m LEFT JOIN downloads d ON d.module_id = m.id
+			WHERE m.quarantined_at IS NULL
+			GROUP BY m.id ORDER BY COALESCE(SUM(d.count), 0) DESC, m.id LIMIT ?`, 2*limit)
+		if err != nil {
+			return nil, fmt.Errorf("popular modules: %w", err)
+		}
+		defer rows.Close()
+		var ranked []popularModule
+		for rows.Next() {
+			var pm popularModule
+			if err := rows.Scan(&pm.namespace, &pm.path); err != nil {
+				return nil, err
+			}
+			ranked = append(ranked, pm)
+		}
+		if err := rows.Err(); err != nil {
 			return nil, err
 		}
-		prefix, _, _ := xmodule.SplitPathVersion(strings.TrimPrefix(p, r.ModuleHost+"/"))
-		out = append(out, prefix)
+		r.popular, r.popularAt = ranked, time.Now()
 	}
-	return out, rows.Err()
+	var out []string
+	for _, pm := range r.popular {
+		if len(out) == limit {
+			break
+		}
+		if pm.namespace != namespace {
+			prefix, _, _ := xmodule.SplitPathVersion(strings.TrimPrefix(pm.path, r.ModuleHost+"/"))
+			out = append(out, prefix)
+		}
+	}
+	return out, nil
 }
+
+// popularTTL is how long the download ranking for name checks is reused.
+// New modules only enter it by being downloaded, which takes longer.
+const popularTTL = 10 * time.Minute
+
+type popularModule struct{ namespace, path string }
 
 // recordFindings stores a version's warnings and opens a report so an
 // administrator looks at them.

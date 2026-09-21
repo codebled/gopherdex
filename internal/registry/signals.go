@@ -30,8 +30,9 @@ func (r *Registry) Signals(ctx context.Context, hits []SearchHit) (map[string]Si
 	}
 	in := "(" + strings.Join(marks, ",") + ")"
 
-	rows, err := r.DB.QueryContext(ctx, `SELECT vr.path, COUNT(*) FROM version_requires vr
-		WHERE vr.path IN `+in+` AND vr.version_id IN (`+latestVersionIDs+`) GROUP BY vr.path`, paths...)
+	rows, err := r.DB.QueryContext(ctx, `SELECT vr.path, COUNT(*)
+		FROM version_requires vr JOIN versions v ON v.id = vr.version_id JOIN modules m ON m.id = v.module_id
+		WHERE vr.path IN `+in+` AND `+isLatest+` GROUP BY vr.path`, paths...)
 	if err != nil {
 		return nil, fmt.Errorf("search signals: %w", err)
 	}
@@ -49,7 +50,7 @@ func (r *Registry) Signals(ctx context.Context, hits []SearchHit) (map[string]Si
 	rows.Close()
 
 	rows, err = r.DB.QueryContext(ctx, `SELECT m.path, v.provenance != '' FROM modules m JOIN versions v ON v.module_id = m.id
-		WHERE m.path IN `+in+` AND v.id IN (`+latestVersionIDs+`)`, paths...)
+		WHERE m.path IN `+in+` AND `+isLatest, paths...)
 	if err != nil {
 		return nil, fmt.Errorf("search signals: %w", err)
 	}

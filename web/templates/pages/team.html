@@ -1,0 +1,98 @@
+{{define "content"}}{{with .Data}}
+<section class="account team-page">
+  <div class="wrap">
+    <div class="account-head">
+      <div>
+        <p class="kicker">Team in <a href="/{{.Org.Name}}">@{{.Org.Name}}</a></p>
+        <h1>@{{.Org.Name}}/{{.Team.Name}}</h1>
+        <p class="muted">{{with .Team.Description}}{{.}} · {{end}}{{len .Members}} member{{if ne (len .Members) 1}}s{{end}} · {{len .Modules}} module{{if ne (len .Modules) 1}}s{{end}}</p>
+      </div>
+    </div>
+
+    {{with .Notice}}<p class="notice success" role="status">{{.}}</p>{{end}}
+    {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
+
+    <section class="panel" aria-labelledby="team-members-title">
+      <div class="panel-head"><h2 id="team-members-title">Members</h2><p>Everyone here gets the team's role on the modules below.</p></div>
+      {{if .Members}}
+      <ul class="collab-list">
+        {{range .Members}}
+        <li>
+          <span><a href="/{{.Username}}">@{{.Username}}</a> <span class="muted small">since {{.Since.Format "2 Jan 2006"}}</span></span>
+          {{if $.Data.IsOrgOwner}}
+          <form class="inline-form" action="/-/orgs/teams/members/remove" method="post">
+            <input type="hidden" name="org" value="{{$.Data.Org.Name}}"><input type="hidden" name="team" value="{{$.Data.Team.Name}}"><input type="hidden" name="username" value="{{.Username}}">
+            <button class="btn btn-link" type="submit" aria-label="Remove @{{.Username}} from the team">Remove</button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="panel-empty muted">Nobody is in this team yet.</p>
+      {{end}}
+      {{if .IsOrgOwner}}
+      {{if .Candidates}}
+      <form class="inline-form add-collab" action="/-/orgs/teams/members" method="post">
+        <input type="hidden" name="org" value="{{.Org.Name}}"><input type="hidden" name="team" value="{{.Team.Name}}">
+        <label class="visually-hidden" for="team-member">Organization member</label>
+        <select id="team-member" name="username" required>
+          {{range .Candidates}}<option value="{{.}}">@{{.}}</option>{{end}}
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Add to team</button>
+      </form>
+      {{else}}
+      <p class="muted small">Every member of @{{.Org.Name}} is already in this team. Add people to <a href="/{{.Org.Name}}">the organization</a> first.</p>
+      {{end}}
+      {{end}}
+    </section>
+
+    <section class="panel" aria-labelledby="team-modules-title">
+      <div class="panel-head"><h2 id="team-modules-title">Modules</h2><p>Maintainers publish and yank; owners also deprecate and manage access.</p></div>
+      {{if .Modules}}
+      <ul class="collab-list">
+        {{range .Modules}}
+        <li>
+          <span><code>{{.Path}}</code> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span></span>
+          {{if $.Data.IsOrgOwner}}
+          <form class="inline-form" action="/-/orgs/teams/modules/remove" method="post">
+            <input type="hidden" name="org" value="{{$.Data.Org.Name}}"><input type="hidden" name="team" value="{{$.Data.Team.Name}}"><input type="hidden" name="module" value="{{.Path}}">
+            <button class="btn btn-link" type="submit" aria-label="Remove the team's access to {{.Path}}">Remove</button>
+          </form>
+          {{end}}
+        </li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="panel-empty muted">This team has no access to any module yet.</p>
+      {{end}}
+      {{if .IsOrgOwner}}
+      {{if .OrgModules}}
+      <form class="inline-form add-collab" action="/-/orgs/teams/modules" method="post">
+        <input type="hidden" name="org" value="{{.Org.Name}}"><input type="hidden" name="team" value="{{.Team.Name}}">
+        <label class="visually-hidden" for="team-module">Module</label>
+        <select id="team-module" name="module" required>
+          {{range .OrgModules}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+        <label class="visually-hidden" for="team-role">Role</label>
+        <select id="team-role" name="role"><option value="maintainer">Maintainer</option><option value="owner">Owner</option></select>
+        <button class="btn btn-primary btn-sm" type="submit">Add or update</button>
+      </form>
+      {{else}}
+      <p class="muted small">@{{.Org.Name}} has no modules yet. Publish one, then give this team access.</p>
+      {{end}}
+      {{end}}
+    </section>
+
+    {{if .IsOrgOwner}}
+    <section class="panel danger-zone" aria-labelledby="team-delete-title">
+      <div class="panel-head"><h2 id="team-delete-title">Delete team</h2><p>Its members lose the access it gave them, and stay in the organization.</p></div>
+      <form action="/-/orgs/teams/delete" method="post">
+        <input type="hidden" name="org" value="{{.Org.Name}}"><input type="hidden" name="team" value="{{.Team.Name}}">
+        <button class="btn btn-danger-outline btn-sm" type="submit">Delete @{{.Org.Name}}/{{.Team.Name}}</button>
+      </form>
+    </section>
+    {{end}}
+  </div>
+</section>
+{{end}}{{end}}

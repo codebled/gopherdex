@@ -15,13 +15,16 @@ import (
 // Org is an organization: a shared namespace, e.g. gopherdex.dev/acme/…,
 // whose members publish modules together.
 type Org struct {
-	Name        string
-	DisplayName string
-	CreatedAt   time.Time
+	Name         string
+	DisplayName  string
+	MemberAccess string // MemberAccessMaintainer or MemberAccessNone
+	CreatedAt    time.Time
 }
 
-// OrgMember is a user in an organization. Owners manage members and act as
-// owners of every module in the namespace; members publish and yank.
+// OrgMember is a user in an organization. Owners manage members and teams
+// and act as owners of every module in the namespace; members publish and
+// yank every module, or, when the organization's member access is "none",
+// the modules their teams cover.
 type OrgMember struct {
 	Username string
 	Role     string // "owner" or "member"
@@ -82,7 +85,7 @@ func (r *Registry) CreateOrg(ctx context.Context, u *accounts.User, name, displa
 func (r *Registry) OrgByName(ctx context.Context, name string) (*Org, bool, error) {
 	var o Org
 	var created int64
-	err := r.DB.QueryRowContext(ctx, `SELECT name, display_name, created_at FROM organizations WHERE name = ?`, name).Scan(&o.Name, &o.DisplayName, &created)
+	err := r.DB.QueryRowContext(ctx, `SELECT name, display_name, member_access, created_at FROM organizations WHERE name = ?`, name).Scan(&o.Name, &o.DisplayName, &o.MemberAccess, &created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -234,7 +237,7 @@ func (r *Registry) requireOrgOwner(ctx context.Context, u *accounts.User, org st
 		return 0, err
 	}
 	if role.String != "owner" {
-		return 0, reject(http.StatusForbidden, "forbidden", "Only owners of %s can manage its members.", org)
+		return 0, reject(http.StatusForbidden, "forbidden", "Only owners of %s can manage its members and teams.", org)
 	}
 	return orgID, nil
 }

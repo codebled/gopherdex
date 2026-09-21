@@ -29,13 +29,16 @@ type downloadKey struct {
 }
 
 // Count records one download. It never blocks on the database.
-func (d *Downloads) Count(modPath, version string) {
+func (d *Downloads) Count(modPath, version string) { d.CountN(modPath, version, 1) }
+
+// CountN records n downloads at once, for importing or generating history.
+func (d *Downloads) CountN(modPath, version string, n int) {
 	day := d.Registry.now().UTC().Unix() / 86400
 	d.mu.Lock()
 	if d.pending == nil {
 		d.pending = map[downloadKey]int{}
 	}
-	d.pending[downloadKey{modPath, version, day}]++
+	d.pending[downloadKey{modPath, version, day}] += n
 	d.mu.Unlock()
 }
 

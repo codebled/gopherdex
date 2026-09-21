@@ -123,7 +123,8 @@ type projectData struct {
 	Notice     string
 	Error      string
 
-	Publishers        []registry.Publisher // for owners, on the manage tab
+	Publishers        []registry.Publisher  // for owners, on the manage tab
+	Teams             []registry.TeamAccess // manage tab of organization modules
 	TrustedPublishing bool
 	SiteURL           string
 
@@ -207,6 +208,12 @@ func (s *server) renderProjectFull(w http.ResponseWriter, r *http.Request, modPa
 	data.Chart = buildChart(data.Downloads.Daily)
 	if tab == "manage" {
 		if data.Findings, err = s.registry.VersionFindings(r.Context(), modPath); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
+	if tab == "manage" && p.Org != nil {
+		if data.Teams, err = s.registry.ModuleTeams(r.Context(), modPath); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -304,14 +311,16 @@ func (s *server) renderProjectFull(w http.ResponseWriter, r *http.Request, modPa
 }
 
 type ownerData struct {
-	Namespace  string
-	Modules    []ownerModule
-	IsSelf     bool
-	Org        *registry.Org
-	Members    []registry.OrgMember
-	IsOrgOwner bool
-	Notice     string
-	Error      string
+	Namespace   string
+	Modules     []ownerModule
+	IsSelf      bool
+	Org         *registry.Org
+	Members     []registry.OrgMember
+	Teams       []registry.Team // shown to the organization's members
+	IsOrgOwner  bool
+	IsOrgMember bool
+	Notice      string
+	Error       string
 }
 
 type ownerModule struct {
@@ -360,6 +369,16 @@ func (s *server) renderOwner(w http.ResponseWriter, r *http.Request, name string
 		if data.IsOrgOwner, err = s.registry.IsOrgOwner(ctx, u, name); err != nil {
 			s.serverError(w, r, err)
 			return
+		}
+		if data.IsOrgMember, err = s.registry.IsOrgMember(ctx, u, name); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if data.IsOrgMember {
+			if data.Teams, err = s.registry.Teams(ctx, name); err != nil {
+				s.serverError(w, r, err)
+				return
+			}
 		}
 	}
 	s.render(w, r, status, "owner", "@"+name, data)

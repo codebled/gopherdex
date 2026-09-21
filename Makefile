@@ -1,4 +1,4 @@
-.PHONY: run run-offline test vet check build dist docker clean
+.PHONY: run run-offline test vet check build dist docker clean bench-seed bench-serve bench-load
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo devel)
 LDFLAGS := -s -w -X github.com/parthiban-sivakumar/gopherdex/internal/version.Version=$(VERSION)
@@ -41,6 +41,17 @@ dist:
 
 docker:
 	docker build --build-arg VERSION=$(VERSION) -t gopherdex:$(VERSION) .
+
+# Load testing (see "Load testing" in README.md). PROFILE=full for 100k modules.
+PROFILE ?= small
+bench-seed:
+	go run ./cmd/gdxbench seed -profile $(PROFILE)
+
+bench-serve:
+	go run ./cmd/gopherdexd -db bench/data/gopherdex.db -blobs bench/data/blobs -offline -trust-proxy -notify-mirror=false
+
+bench-load:
+	go run ./cmd/gdxbench load -c 32 -d 60s
 
 clean:
 	rm -rf bin dist

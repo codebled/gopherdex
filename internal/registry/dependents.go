@@ -69,18 +69,19 @@ type Dependent struct {
 	Indirect bool
 }
 
-// latestVersionIDs picks each visible module's latest installable release,
-// like the listings do.
-const latestVersionIDs = `SELECT v.id FROM modules m JOIN versions v ON v.module_id = m.id
-	WHERE m.quarantined_at IS NULL
-	  AND v.id = (SELECT id FROM versions WHERE module_id = m.id AND yanked_at IS NULL ORDER BY published_at DESC, id DESC LIMIT 1)`
+// isLatest holds when version v (of module m) is its module's latest
+// installable release and the module is visible, like the listings pick.
+// Queries start from the few rows they care about and check this per row,
+// instead of first finding the latest release of every module.
+const isLatest = `m.quarantined_at IS NULL
+	AND v.id = (SELECT l.id FROM versions l WHERE l.module_id = v.module_id AND l.yanked_at IS NULL ORDER BY l.published_at DESC, l.id DESC LIMIT 1)`
 
 // Dependents lists the hosted modules whose latest release requires
 // modPath, directly first.
 func (r *Registry) Dependents(ctx context.Context, modPath string, limit int) ([]Dependent, error) {
 	rows, err := r.DB.QueryContext(ctx, `SELECT m.path, v.version, vr.version, vr.indirect
 		FROM version_requires vr JOIN versions v ON v.id = vr.version_id JOIN modules m ON m.id = v.module_id
-		WHERE vr.path = ? AND vr.version_id IN (`+latestVersionIDs+`)
+		WHERE vr.path = ? AND `+isLatest+`
 		ORDER BY vr.indirect, m.path LIMIT ?`, modPath, limit)
 	if err != nil {
 		return nil, fmt.Errorf("dependents of %s: %w", modPath, err)
@@ -100,8 +101,9 @@ func (r *Registry) Dependents(ctx context.Context, modPath string, limit int) ([
 // DependentCounts counts the hosted modules whose latest release requires
 // modPath: directly, and in total.
 func (r *Registry) DependentCounts(ctx context.Context, modPath string) (direct, total int, err error) {
-	err = r.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(vr.indirect = 0), 0), COUNT(*) FROM version_requires vr
-		WHERE vr.path = ? AND vr.version_id IN (`+latestVersionIDs+`)`, modPath).Scan(&direct, &total)
+	err = r.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(vr.indirect = 0), 0), COUNT(*)
+		FROM version_requires vr JOIN versions v ON v.id = vr.version_id JOIN modules m ON m.id = v.module_id
+		WHERE vr.path = ? AND `+isLatest, modPath).Scan(&direct, &total)
 	if err != nil {
 		return 0, 0, fmt.Errorf("count dependents of %s: %w", modPath, err)
 	}

@@ -159,6 +159,7 @@ func run() error {
 	vulnDB := flag.String("vulndb", vulndb.DefaultUpstream, "public Go vulnerability database merged into /vulndb and used to flag vulnerable dependencies; empty turns it off (off with -offline)")
 	playground := flag.String("playground", "https://play.golang.org", "Go Playground that documentation examples open in; empty hides the Run buttons (off with -offline)")
 	publishChecks := flag.Bool("publish-checks", true, "scan uploads before publishing: refuse compiled programs, and send code that runs on import, encoded blobs and look-alike names for review")
+	listingCache := flag.Duration("listing-cache", 30*time.Second, "how long the home page's listings and registry totals are cached; 0 turns caching off")
 	verbose := flag.Bool("v", false, "log debug messages")
 	flag.Parse()
 	if err := flagsFromEnv(flag.CommandLine, os.Getenv); err != nil {
@@ -300,6 +301,7 @@ func run() error {
 		Mirror:        mirrorOrNil(notifier),
 		Admins:        splitList(*admins),
 		GitHubOIDC:    githubOIDC,
+		ListingCache:  *listingCache,
 		VulnDB:        vulnUpstream,
 		PlaygroundURL: map[bool]string{true: "", false: *playground}[*offline],
 	})

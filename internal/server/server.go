@@ -71,9 +71,15 @@ type Config struct {
 	// PlaygroundURL is the Go Playground that "Run" buttons on examples
 	// share code with, e.g. https://play.golang.org. Empty hides them.
 	PlaygroundURL string
+	// ListingCache is how long the home page's listings and the registry
+	// totals may be served from memory. Zero computes them on every request.
+	ListingCache time.Duration
 }
 
 type server struct {
+	home  cached[indexData]
+	stats cached[registry.Stats]
+
 	disc          *discovery.Service
 	accounts      *accounts.Service
 	log           *slog.Logger
@@ -148,6 +154,8 @@ func New(cfg Config) (http.Handler, error) {
 		secureCookies: cfg.SecureCookies,
 		trustProxy:    cfg.TrustProxy,
 		mirror:        cfg.Mirror,
+		home:          cached[indexData]{TTL: cfg.ListingCache},
+		stats:         cached[registry.Stats]{TTL: cfg.ListingCache},
 		loginLimit:    ratelimit.New(10, 5*time.Minute),
 		signupLimit:   ratelimit.New(5, time.Hour),
 		emailLimit:    ratelimit.New(3, time.Hour),
@@ -219,6 +227,14 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("POST /-/orgs", s.handleCreateOrg)
 	mux.HandleFunc("POST /-/orgs/members", s.handleSetOrgMember)
 	mux.HandleFunc("POST /-/orgs/members/remove", s.handleRemoveOrgMember)
+	mux.HandleFunc("POST /-/orgs/access", s.handleMemberAccess)
+	mux.HandleFunc("POST /-/orgs/teams", s.handleCreateTeam)
+	mux.HandleFunc("POST /-/orgs/teams/delete", s.handleDeleteTeam)
+	mux.HandleFunc("POST /-/orgs/teams/members", s.handleAddTeamMember)
+	mux.HandleFunc("POST /-/orgs/teams/members/remove", s.handleRemoveTeamMember)
+	mux.HandleFunc("POST /-/orgs/teams/modules", s.handleSetTeamModule)
+	mux.HandleFunc("POST /-/orgs/teams/modules/remove", s.handleRemoveTeamModule)
+	mux.HandleFunc("GET /orgs/{org}/teams/{team}", s.handleTeam)
 	mux.HandleFunc("POST /-/publishers", s.handleAddPublisher)
 	mux.HandleFunc("POST /-/publishers/remove", s.handleRemovePublisher)
 
@@ -294,26 +310,34 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/search?"+url.Values{"q": {q}}.Encode(), http.StatusFound)
 		return
 	}
-	ctx := r.Context()
-	data := indexData{ModuleHost: s.moduleHost}
-	var err error
-	if data.Stats, err = s.registry.Stats(ctx); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if data.Recent, err = s.registry.RecentlyUpdated(ctx, showcaseSize, 0); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if data.New, err = s.registry.NewModules(ctx, showcaseSize); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if data.Popular, err = s.registry.PopularModules(ctx, showcaseSize); err != nil {
+	data, err := s.home.get(func() (indexData, error) { return s.loadIndex(r.Context()) })
+	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	s.render(w, r, http.StatusOK, "index", "", data)
+}
+
+// loadIndex gathers the home page's totals and listings.
+func (s *server) loadIndex(ctx context.Context) (indexData, error) {
+	data := indexData{ModuleHost: s.moduleHost}
+	var err error
+	if data.Stats, err = s.registryStats(ctx); err != nil {
+		return data, err
+	}
+	if data.Recent, err = s.registry.RecentlyUpdated(ctx, showcaseSize, 0); err != nil {
+		return data, err
+	}
+	if data.New, err = s.registry.NewModules(ctx, showcaseSize); err != nil {
+		return data, err
+	}
+	data.Popular, err = s.registry.PopularModules(ctx, showcaseSize)
+	return data, err
+}
+
+// registryStats returns the registry totals, cached like the listings.
+func (s *server) registryStats(ctx context.Context) (registry.Stats, error) {
+	return s.stats.get(func() (registry.Stats, error) { return s.registry.Stats(ctx) })
 }
 
 // handleModules is the old browse page; the search page now lists every

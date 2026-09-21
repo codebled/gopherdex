@@ -363,7 +363,7 @@ func (s *server) handleV1Owner(w http.ResponseWriter, r *http.Request) {
 
 // handleV1Stats serves GET /api/v1/stats.
 func (s *server) handleV1Stats(w http.ResponseWriter, r *http.Request) {
-	st, err := s.registry.Stats(r.Context())
+	st, err := s.registryStats(r.Context())
 	if err != nil {
 		s.apiError(w, r, err)
 		return

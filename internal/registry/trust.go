@@ -46,15 +46,19 @@ func (r *Registry) quarantined(ctx context.Context, modPath string) (bool, error
 }
 
 // Maintainers lists everyone who should hear about changes to a module:
-// its owners and maintainers, and for organization modules, the
-// organization's members.
+// its owners and maintainers, the members of teams with access, and for
+// organization modules, the organization's owners (and its members, unless
+// member access is "none").
 func (r *Registry) Maintainers(ctx context.Context, modPath string) ([]string, error) {
 	rows, err := r.DB.QueryContext(ctx, `
 		SELECT u.username FROM module_roles mr JOIN modules m ON m.id = mr.module_id JOIN users u ON u.id = mr.user_id WHERE m.path = ?
 		UNION
 		SELECT u.username FROM modules m JOIN organizations o ON o.name = m.namespace JOIN org_members om ON om.org_id = o.id
-			JOIN users u ON u.id = om.user_id WHERE m.path = ?
-		ORDER BY 1`, modPath, modPath)
+			JOIN users u ON u.id = om.user_id WHERE m.path = ? AND (om.role = 'owner' OR o.member_access = 'maintainer')
+		UNION
+		SELECT u.username FROM modules m JOIN team_modules tm ON tm.module_id = m.id JOIN team_members tu ON tu.team_id = tm.team_id
+			JOIN users u ON u.id = tu.user_id WHERE m.path = ?
+		ORDER BY 1`, modPath, modPath, modPath)
 	if err != nil {
 		return nil, fmt.Errorf("maintainers of %s: %w", modPath, err)
 	}

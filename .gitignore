@@ -6,3 +6,4 @@
 /data/blobs/
 /data/backups/
 /deploy/*.env
+/bench/

@@ -16,17 +16,24 @@ import (
 
 // manageNotices are the fixed messages shown after a maintainer action.
 var manageNotices = map[string]string{
-	"yanked":            "Version yanked. It's hidden from new installs; builds that already use it keep working.",
-	"unyanked":          "Version restored. It's installable again.",
-	"deprecated":        "Module marked deprecated. The notice shows on its page and in search.",
-	"undeprecated":      "Deprecation notice removed.",
-	"role-set":          "Access updated.",
-	"role-removed":      "Access removed.",
-	"org-created":       "Organization created. Publish modules under its namespace, and add members below.",
-	"member-set":        "Member updated.",
-	"member-removed":    "Member removed.",
-	"publisher-added":   "Trusted publisher added. Its workflow can now publish with gopherdex publish, no API token needed.",
-	"publisher-removed": "Trusted publisher removed. Tokens it had already received are revoked.",
+	"yanked":              "Version yanked. It's hidden from new installs; builds that already use it keep working.",
+	"unyanked":            "Version restored. It's installable again.",
+	"deprecated":          "Module marked deprecated. The notice shows on its page and in search.",
+	"undeprecated":        "Deprecation notice removed.",
+	"role-set":            "Access updated.",
+	"role-removed":        "Access removed.",
+	"org-created":         "Organization created. Publish modules under its namespace, and add members below.",
+	"member-set":          "Member updated.",
+	"member-removed":      "Member removed.",
+	"publisher-added":     "Trusted publisher added. Its workflow can now publish with gopherdex publish, no API token needed.",
+	"publisher-removed":   "Trusted publisher removed. Tokens it had already received are revoked.",
+	"access-set":          "Member access updated.",
+	"team-created":        "Team created. Add members and give it access to modules below.",
+	"team-deleted":        "Team deleted. Its members lost the access it gave them, and stay in the organization.",
+	"team-member-added":   "Added to the team.",
+	"team-member-removed": "Removed from the team. They stay in the organization.",
+	"team-module-set":     "Team access updated.",
+	"team-module-removed": "Team access removed.",
 }
 
 // maintainerAction handles a manage-tab form: it checks the module, runs

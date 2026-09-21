@@ -44,18 +44,23 @@ func parseRole(s string) (Role, bool) {
 
 const maxReason = 500
 
-// Role returns u's role on an existing module: the stronger of their
-// module role and, for organization modules, their organization role (org
-// owners act as owners, members as maintainers).
+// Role returns u's role on an existing module: the strongest of their
+// module role, their teams' roles, and, for organization modules, their
+// organization role (org owners act as owners; members act as maintainers
+// unless the organization's member access is "none").
 func (r *Registry) Role(ctx context.Context, u *accounts.User, modPath string) (Role, error) {
 	if u == nil {
 		return RoleNone, nil
 	}
-	var moduleRole, orgRole sql.NullString
+	var moduleRole, orgRole, memberAccess sql.NullString
+	var teamRole sql.NullInt64
 	err := r.DB.QueryRowContext(ctx, `SELECT
 			(SELECT mr.role FROM module_roles mr WHERE mr.module_id = m.id AND mr.user_id = ?),
-			(SELECT om.role FROM organizations o JOIN org_members om ON om.org_id = o.id WHERE o.name = m.namespace AND om.user_id = ?)
-		FROM modules m WHERE m.path = ?`, u.ID, u.ID, modPath).Scan(&moduleRole, &orgRole)
+			(SELECT om.role FROM organizations o JOIN org_members om ON om.org_id = o.id WHERE o.name = m.namespace AND om.user_id = ?),
+			(SELECT o.member_access FROM organizations o WHERE o.name = m.namespace),
+			(SELECT MAX(CASE tm.role WHEN 'owner' THEN 2 ELSE 1 END) FROM team_modules tm
+				JOIN team_members tu ON tu.team_id = tm.team_id WHERE tm.module_id = m.id AND tu.user_id = ?)
+		FROM modules m WHERE m.path = ?`, u.ID, u.ID, u.ID, modPath).Scan(&moduleRole, &orgRole, &memberAccess, &teamRole)
 	if errors.Is(err, sql.ErrNoRows) {
 		return RoleNone, fmt.Errorf("module %s: %w", modPath, module.ErrNotFound)
 	}
@@ -66,10 +71,11 @@ func (r *Registry) Role(ctx context.Context, u *accounts.User, modPath string) (
 	if rl, ok := parseRole(moduleRole.String); ok {
 		role = rl
 	}
-	switch orgRole.String {
-	case "owner":
+	role = max(role, Role(teamRole.Int64)) // 1 maintainer, 2 owner
+	switch {
+	case orgRole.String == "owner":
 		role = RoleOwner
-	case "member":
+	case orgRole.String == "member" && memberAccess.String != MemberAccessNone:
 		role = max(role, RoleMaintainer)
 	}
 	return role, nil

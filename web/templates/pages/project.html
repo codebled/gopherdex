@@ -445,7 +445,15 @@
 
           <section class="manage-block" aria-labelledby="access-title">
             <h3 id="access-title">Access</h3>
-            {{if .Org}}<p class="muted">Members of <a href="/{{.Namespace}}">@{{.Namespace}}</a> maintain this module and its owners own it. People added here get access to this module only.</p>{{end}}
+            {{if .Org}}<p class="muted">{{if eq .Org.MemberAccess "none"}}Owners of <a href="/{{.Namespace}}">@{{.Namespace}}</a> own this module; its members get access through teams.{{else}}Members of <a href="/{{.Namespace}}">@{{.Namespace}}</a> maintain this module and its owners own it.{{end}} People added here get access to this module only.</p>
+            {{if .Teams}}
+            <ul class="collab-list">
+              {{range .Teams}}
+              <li><span><a href="/orgs/{{$.Data.Namespace}}/teams/{{.Team}}">@{{$.Data.Namespace}}/{{.Team}}</a> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span></span><span class="muted small">team</span></li>
+              {{end}}
+            </ul>
+            {{end}}
+            <p class="muted small">Organization owners give teams access on each team's page.</p>{{end}}
             {{if .Collaborators}}
             <ul class="collab-list">
               {{range .Collaborators}}

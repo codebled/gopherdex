@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/mod/modfile"
@@ -58,6 +59,11 @@ func reject(status int, code, format string, args ...any) *Error {
 
 // Registry stores and serves published modules.
 type Registry struct {
+	// popular caches the download ranking the name checks compare against.
+	popularMu sync.Mutex
+	popular   []popularModule
+	popularAt time.Time
+
 	DB         *sql.DB
 	Blobs      blob.Store
 	ModuleHost string // e.g. "gopherdex.dev"
@@ -284,11 +290,23 @@ func (r *Registry) Publish(ctx context.Context, u Upload) (*Published, error) {
 		return nil, fmt.Errorf("module %s belongs to namespace %q, not %q", u.Module, owner, namespace)
 	}
 	// The first publisher of a module in a personal namespace owns it.
-	// Organization modules are managed through the organization's roles.
-	if n, _ := created.RowsAffected(); n == 1 && namespace == u.User.Username {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO module_roles (module_id, user_id, role, created_by, created_at) VALUES (?, ?, 'owner', ?, ?)`,
-			moduleID, u.User.ID, u.User.ID, now.Unix()); err != nil {
-			return nil, fmt.Errorf("publish %s: record owner: %w", u.Module, err)
+	// Organization modules are managed through the organization's roles,
+	// except that where members get no access without a team, a member who
+	// creates a module maintains it until an owner decides otherwise.
+	if n, _ := created.RowsAffected(); n == 1 {
+		role := ""
+		if namespace == u.User.Username {
+			role = "owner"
+		} else if err := tx.QueryRowContext(ctx, `SELECT 'maintainer' FROM organizations o JOIN org_members om ON om.org_id = o.id
+				WHERE o.name = ? AND om.user_id = ? AND om.role = 'member' AND o.member_access = 'none'`,
+			namespace, u.User.ID).Scan(&role); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("publish %s: %w", u.Module, err)
+		}
+		if role != "" {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO module_roles (module_id, user_id, role, created_by, created_at) VALUES (?, ?, ?, ?, ?)`,
+				moduleID, u.User.ID, role, u.User.ID, now.Unix()); err != nil {
+				return nil, fmt.Errorf("publish %s: record %s: %w", u.Module, role, err)
+			}
 		}
 	}
 	vcs := ""
@@ -855,11 +873,13 @@ type Listing struct {
 	CreatedAt   time.Time // of the module
 }
 
-// listingQuery selects each module with its most recently published version.
+// listingQuery selects each module with its most recently published
+// version. Callers order it by an indexed column and stop at a limit, so
+// SQLite walks the newest rows and checks each is its module's latest,
+// instead of finding every module's latest release first.
 const listingQuery = `SELECT m.path, m.namespace, v.version, v.synopsis, v.published_at, m.created_at
-	FROM modules m JOIN versions v ON v.module_id = m.id
-	WHERE m.quarantined_at IS NULL
-	  AND v.id = (SELECT id FROM versions WHERE module_id = m.id AND yanked_at IS NULL ORDER BY published_at DESC, id DESC LIMIT 1)`
+	FROM versions v JOIN modules m ON m.id = v.module_id
+	WHERE v.yanked_at IS NULL AND ` + isLatest
 
 // RecentlyUpdated lists modules by their latest release, newest first.
 func (r *Registry) RecentlyUpdated(ctx context.Context, limit, offset int) ([]Listing, error) {

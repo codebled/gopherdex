@@ -1,0 +1,15 @@
+# Litestream continuously copies the SQLite database to S3-compatible
+# storage (every change within about a second), so losing the server loses
+# at most the last second of writes. Settings come from gopherdex.env.
+dbs:
+  - path: /data/gopherdex.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: ${LITESTREAM_PATH}
+        endpoint: ${LITESTREAM_ENDPOINT}
+        region: ${LITESTREAM_REGION}
+        force-path-style: true
+        # Keep a week of history, so a bad change can be rolled back too.
+        retention: 168h
+        snapshot-interval: 24h

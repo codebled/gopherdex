@@ -10,7 +10,7 @@ A package registry for Go modules, in the spirit of pypi.org.
 - **Discovery:** full-text search with filters (license, Go version, last release, deprecated) and sorting (relevance, downloads, recently updated, newest), download counts and charts, and a home page with just-updated, most-downloaded and new modules. Public pkg.go.dev results follow in their own section.
 - **Public modules:** modules that aren't hosted here come from `proxy.golang.org`, with search and docs from `pkg.go.dev`. Run with `-offline` to turn this off.
 
-Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done).
+Roadmap: accounts (done) → publish from the CLI (done) → zero-setup `go get` (done; confirm on your domain) → project pages (done) → maintainer tools (done) → search and stats (done) → trust and operations (done) → trusted publishing from GitHub Actions (done) → launch readiness (done; see [deploy/README.md](deploy/README.md)) → accounts and feeds (done) → security advisories (done) → production storage: S3 and Litestream (done).
 
 ## Run it
 
@@ -34,7 +34,7 @@ Open http://localhost:8080 and choose **Register**. Without `-smtp-addr`, emails
 | `-base-url` | `http://<addr>` | Public URL, used in email links and CLI output; `https` turns on Secure cookies |
 | `-module-host` | host of `-base-url`, or `gopherdex.localhost` | Domain in module paths. Module paths can't have a port or a dot-less host, so local development uses `gopherdex.localhost/<user>/<module>` |
 | `-db` | `data/gopherdex.db` | SQLite database (created and migrated on start) |
-| `-blobs` | `data/blobs` | Published module zips |
+| `-blobs` | `data/blobs` | Published module zips: a directory, or an S3-compatible bucket, `s3://bucket/prefix?region=…&endpoint=…`, with credentials in `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. `gopherdexd blobs copy -from … -to …` moves existing zips |
 | `-max-upload` | 50 MiB | Largest module zip accepted |
 | `-data` | (none) | Serve fixture modules from a directory too, e.g. `data/modules` for demos |
 | `-smtp-addr` / `-smtp-from` / `-smtp-user` | | SMTP server for real emails; password in `$GOPHERDEX_SMTP_PASSWORD` |
@@ -257,6 +257,8 @@ Organizations and users share one namespace list, so a name can't be both.
 | **Rate limits** | Sign-in (including 2FA codes), sign-up, password resets, verification emails, uploads, reports, search pages and the JSON API are all limited. The GOPROXY endpoints aren't, because the go command and the public mirror fetch many files at once. |
 
 ## Backups
+
+For production, keep module zips in S3-compatible storage (`-blobs s3://bucket/prefix?region=…&endpoint=…`) and replicate the database continuously with Litestream. [deploy/README.md](deploy/README.md) has the setup and the recovery steps. The rest of this section covers the built-in local backups.
 
 ```bash
 gopherdexd backup -db data/gopherdex.db -out /backups/gopherdex.db    # one-off, safe while the server runs

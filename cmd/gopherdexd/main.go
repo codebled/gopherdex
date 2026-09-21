@@ -43,6 +43,8 @@ func main() {
 			run = backupCommand
 		case "healthcheck":
 			run = healthcheckCommand
+		case "blobs":
+			run = blobsCommand
 		case "version", "-version", "--version":
 			fmt.Println("gopherdexd", version.String())
 			return
@@ -73,6 +75,39 @@ func healthcheckCommand() error {
 	return nil
 }
 
+// blobsCommand is "gopherdexd blobs copy -from A -to B": it copies every
+// published zip between stores, e.g. from the local directory to S3 before
+// switching -blobs. Blobs already at the destination are skipped, so it's
+// safe to run again.
+func blobsCommand() error {
+	if len(os.Args) < 3 || os.Args[2] != "copy" {
+		return errors.New("usage: gopherdexd blobs copy -from DIR|s3://… -to DIR|s3://…")
+	}
+	fs := flag.NewFlagSet("blobs copy", flag.ExitOnError)
+	from := fs.String("from", "data/blobs", "store to copy from")
+	to := fs.String("to", "", "store to copy to")
+	maxSize := fs.Int64("max-upload", registry.DefaultMaxZipSize*2, "largest blob to copy, in bytes")
+	fs.Parse(os.Args[3:])
+	if *to == "" || *to == *from {
+		return errors.New("give a different -to store")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	src, closeSrc, err := blob.Open(*from, os.Getenv)
+	if err != nil {
+		return err
+	}
+	defer closeSrc()
+	dst, closeDst, err := blob.Open(*to, os.Getenv)
+	if err != nil {
+		return err
+	}
+	defer closeDst()
+	copied, skipped, err := blob.Copy(ctx, dst, src, *maxSize)
+	fmt.Printf("Copied %d blobs, skipped %d already at %s.\n", copied, skipped, *to)
+	return err
+}
+
 // backupCommand is "gopherdexd backup -db FILE -out FILE": a consistent
 // copy of the database, safe to take while the server runs.
 func backupCommand() error {
@@ -100,7 +135,7 @@ func backupCommand() error {
 func run() error {
 	addr := flag.String("addr", "localhost:8080", "address to listen on")
 	dataDir := flag.String("data", "", "directory of fixture modules to serve alongside published ones (for demos and tests)")
-	blobDir := flag.String("blobs", "data/blobs", "directory for published module zips")
+	blobDir := flag.String("blobs", "data/blobs", "where published module zips live: a directory, or an S3-compatible bucket like s3://bucket/prefix?region=…&endpoint=… (credentials from AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY)")
 	moduleHost := flag.String("module-host", "", "domain modules are published under (default: the -base-url host, or gopherdex.localhost for localhost)")
 	maxUpload := flag.Int64("max-upload", registry.DefaultMaxZipSize, "largest module zip accepted, in bytes")
 	upstream := flag.String("upstream", "https://proxy.golang.org", "public GOPROXY used for modules not hosted here")
@@ -163,11 +198,19 @@ func run() error {
 	if err := xmodule.CheckPath(*moduleHost + "/owner/name"); err != nil {
 		return fmt.Errorf("-module-host %q can't start a Go module path (it needs a dot and no port): %w", *moduleHost, err)
 	}
-	blobs, err := blob.OpenFS(*blobDir)
+	blobs, closeBlobs, err := blob.Open(*blobDir, os.Getenv)
 	if err != nil {
 		return err
 	}
-	defer blobs.Close()
+	defer closeBlobs()
+	if s3, ok := blobs.(*blob.S3); ok {
+		checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := s3.Check(checkCtx)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
 	reg := &registry.Registry{DB: db, Blobs: blobs, ModuleHost: *moduleHost, MaxZipSize: *maxUpload, Log: log, Require2FA: *require2FA}
 
 	if *backupDir != "" {

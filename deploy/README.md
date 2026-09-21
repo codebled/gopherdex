@@ -53,10 +53,41 @@ Work through it in order. Steps 5 and 6 are the first real test of zero-setup in
 6. **Trusted publishing:** add a trusted publisher on the test module's Manage tab. Then push a tag from a GitHub repository that uses the example workflow. The project page should show **Verified source** with a link to the run.
 7. **Backups:**
    - Check that `/data/backups` fills up: `docker compose exec gopherdex ls /data/backups` won't work (distroless has no `ls`), so use `docker run --rm -v deploy_gopherdex-data:/d alpine ls /d/backups`.
-   - Set up an off-machine copy of the volume: backups plus `blobs/`.
+   - Better: set up S3 storage and Litestream (below), so nothing important lives only on the machine. Otherwise copy the volume (backups plus `blobs/`) off the machine.
    - Restore once onto a scratch machine to prove it works.
 8. **Monitoring:** point an uptime checker at `https://<domain>/healthz`. It returns 503 if the database is unreachable.
 9. **Search engines:** submit `https://<domain>/sitemap.xml` to Google Search Console and Bing Webmaster Tools.
+
+## S3-compatible storage (optional)
+
+Out of the box, the database and module zips live in the `gopherdex-data` volume, backed up daily inside it. For a production registry, move both to an S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2, MinIO…). Then losing the server loses nothing.
+
+**Module zips.** Set `GOPHERDEX_BLOBS` and the credentials in `gopherdex.env` (see the example file), copy the zips already published, and restart:
+
+```bash
+docker compose run --rm gopherdex blobs copy -from /data/blobs -to "s3://my-bucket/zips?region=us-east-1"
+docker compose up -d
+```
+
+Uploads use conditional writes (`If-None-Match: *`), so a published zip can never be overwritten. The server checks the bucket at start-up and refuses to start with wrong credentials. `blobs copy` skips zips already copied, so it's safe to run again.
+
+**The database, with Litestream.** Fill in the `LITESTREAM_*` settings, then start the replication sidecar:
+
+```bash
+docker compose --profile litestream up -d
+```
+
+[Litestream](https://litestream.io) streams every database change to the bucket within about a second and keeps a week of history.
+
+**Recovering on a new server.** Restore before the registry starts:
+
+```bash
+docker compose run --rm --no-deps --user 0 --entrypoint sh litestream -c \
+  'litestream restore -if-replica-exists /data/gopherdex.db && rm -f /data/gopherdex.db.tmp-* && chown -R 65532:65532 /data'
+docker compose --profile litestream up -d
+```
+
+`--no-deps` keeps the registry from starting first and creating an empty database. The `chown` gives the files to the registry's user; the image runs as non-root.
 
 ## Upgrading
 

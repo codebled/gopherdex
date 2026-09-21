@@ -31,6 +31,21 @@ services:
     depends_on:
       - gopherdex
 
+  # Opt-in continuous replication of the database to S3 (see README):
+  #   docker compose --profile litestream up -d
+  litestream:
+    image: litestream/litestream:0.3
+    profiles: ["litestream"]
+    restart: unless-stopped
+    user: "65532:65532" # the registry image's user, so both can write the database files
+    env_file: gopherdex.env
+    command: replicate
+    volumes:
+      - gopherdex-data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    depends_on:
+      - gopherdex
+
 volumes:
   gopherdex-data:
   caddy-data:

@@ -175,3 +175,63 @@ func (c *ctxReader) Read(p []byte) (int, error) {
 	}
 	return c.r.Read(p)
 }
+
+// Keys calls fn with every stored key, for copying to another store.
+func (s *FS) Keys(ctx context.Context, fn func(key string) error) error {
+	return fs.WalkDir(s.root.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if d.IsDir() || strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+		return fn(p)
+	})
+}
+
+// Lister is a store that can enumerate its keys.
+type Lister interface {
+	Store
+	Keys(ctx context.Context, fn func(key string) error) error
+}
+
+// Open opens the store a -blobs setting names: an s3:// URL (see ParseS3)
+// or a local directory. The returned func releases it.
+func Open(spec string, getenv func(string) string) (Lister, func() error, error) {
+	if strings.HasPrefix(spec, "s3://") {
+		s, err := ParseS3(spec, getenv)
+		if err != nil {
+			return nil, nil, err
+		}
+		return s, func() error { return nil }, nil
+	}
+	s, err := OpenFS(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	return s, s.Close, nil
+}
+
+// Copy copies every blob from src to dst, skipping ones dst already has,
+// and reports how many it copied and skipped.
+func Copy(ctx context.Context, dst Store, src Lister, maxSize int64) (copied, skipped int, err error) {
+	err = src.Keys(ctx, func(key string) error {
+		r, err := src.Open(ctx, key)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		if _, err := dst.Put(ctx, key, r, maxSize); errors.Is(err, ErrExists) {
+			skipped++
+			return nil
+		} else if err != nil {
+			return err
+		}
+		copied++
+		return nil
+	})
+	return copied, skipped, err
+}

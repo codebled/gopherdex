@@ -443,6 +443,7 @@ main > section.showcase { padding-block: 64px 88px; }
 .search-small { max-width: 380px; padding: 4px 4px 4px 12px; }
 .search-small input { font-size: 15px; padding: 8px 4px; }
 .module-rows-wide { margin-bottom: 24px; }
+.owner-pager { margin-top: 20px; }
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 
 .loading-row { padding: 12px 4px; list-style: none; }

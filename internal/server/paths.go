@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
@@ -313,6 +314,10 @@ func (s *server) renderProjectFull(w http.ResponseWriter, r *http.Request, modPa
 type ownerData struct {
 	Namespace   string
 	Modules     []ownerModule
+	Total       int // modules in the namespace; Modules is one page of them
+	Page, Pages int
+	PrevURL     string
+	NextURL     string
 	IsSelf      bool
 	Org         *registry.Org
 	Members     []registry.OrgMember
@@ -327,6 +332,9 @@ type ownerModule struct {
 	registry.ModuleSummary
 	URL string
 }
+
+// ownerPageSize is how many modules an owner page lists at a time.
+const ownerPageSize = 60
 
 func (s *server) handleOwner(w http.ResponseWriter, r *http.Request, name string) {
 	s.renderOwner(w, r, name, http.StatusOK, "")
@@ -344,12 +352,21 @@ func (s *server) renderOwner(w http.ResponseWriter, r *http.Request, name string
 		s.notFound(w, r)
 		return
 	}
-	mods, err := s.registry.NamespaceModules(ctx, name)
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	page = max(page, 1)
+	mods, total, err := s.registry.NamespaceModulesPage(ctx, name, ownerPageSize, (page-1)*ownerPageSize)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	data := ownerData{Namespace: name, Notice: manageNotices[r.URL.Query().Get("done")], Error: errMsg}
+	data := ownerData{Namespace: name, Notice: manageNotices[r.URL.Query().Get("done")], Error: errMsg,
+		Total: total, Page: page, Pages: max(1, (total+ownerPageSize-1)/ownerPageSize)}
+	if page > 1 {
+		data.PrevURL = "/" + name + "?page=" + strconv.Itoa(page-1)
+	}
+	if page < data.Pages {
+		data.NextURL = "/" + name + "?page=" + strconv.Itoa(page+1)
+	}
 	for _, m := range mods {
 		data.Modules = append(data.Modules, ownerModule{ModuleSummary: m, URL: s.project.URL(m.Path, "")})
 	}

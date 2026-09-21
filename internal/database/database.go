@@ -26,8 +26,9 @@ var migrations embed.FS
 // it to the latest schema.
 //
 // The connection enables foreign keys, WAL journaling for concurrent readers,
-// a busy timeout so writers queue instead of failing, and immediate
-// transactions so a read-then-write transaction cannot deadlock.
+// a busy timeout so writers queue instead of failing, immediate
+// transactions so a read-then-write transaction cannot deadlock, and
+// memory-mapped reads.
 func Open(ctx context.Context, path string) (*sql.DB, error) {
 	if dir := filepath.Dir(path); dir != "." {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -35,7 +36,12 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 		}
 	}
 	q := url.Values{}
-	for _, p := range []string{"foreign_keys(1)", "journal_mode(WAL)", "busy_timeout(5000)", "synchronous(NORMAL)"} {
+	// mmap_size lets reads come straight from the OS page cache, shared by
+	// every connection, instead of one pread system call per page: load
+	// testing a 4.6 GB database spent three quarters of its CPU in pread.
+	// cache_size keeps a connection's hottest pages (8 MB each).
+	for _, p := range []string{"foreign_keys(1)", "journal_mode(WAL)", "busy_timeout(5000)", "synchronous(NORMAL)",
+		"mmap_size(2147483648)", "cache_size(-8000)"} {
 		q.Add("_pragma", p)
 	}
 	q.Set("_txlock", "immediate")

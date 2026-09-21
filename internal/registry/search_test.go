@@ -193,3 +193,78 @@ func TestBackfill(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSearchAtScaleBehaviour(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	// "cache" in the name, in the summary, and only in the README (many times).
+	f.publishFiles(t, host+"/alice/cache", "v1.0.0", moduleFiles(host+"/alice/cache", "1.22", "Package cache stores values.", "# cache\n", ""))
+	f.publishFiles(t, host+"/alice/kv", "v1.0.0", moduleFiles(host+"/alice/kv", "1.22", "Package kv is a cache for key-value pairs.", "# kv\n", ""))
+	f.publishFiles(t, host+"/alice/web", "v1.0.0", moduleFiles(host+"/alice/web", "1.22", "Package web serves pages.",
+		"# web\n\ncache cache cache cache cache cache cache cache\n", ""))
+
+	hits, total, err := f.reg.Search(ctx, SearchQuery{Text: "cache"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := paths(hits)
+	if total != 3 || len(got) != 3 || got[2] != host+"/alice/web" {
+		t.Fatalf("README-only matches must come after name and summary matches: %v (total %d)", got, total)
+	}
+	// Paging crosses from the first tier to the README-only tier.
+	hits, _, _ = f.reg.Search(ctx, SearchQuery{Text: "cache", Limit: 1, Offset: 2})
+	if p := paths(hits); len(p) != 1 || p[0] != host+"/alice/web" {
+		t.Fatalf("page 3 = %v", p)
+	}
+
+	// The registry's own host isn't indexed, so it doesn't match everything,
+	// but a pasted full path still finds the module.
+	if _, n, _ := f.reg.Search(ctx, SearchQuery{Text: "gopherdex"}); n != 0 {
+		t.Errorf("the module host matched %d modules", n)
+	}
+	for _, q := range []string{host + "/alice/kv", "https://" + host + "/alice/kv"} {
+		if hits, _, _ := f.reg.Search(ctx, SearchQuery{Text: q}); len(hits) != 1 || hits[0].Path != host+"/alice/kv" {
+			t.Errorf("%q found %v", q, paths(hits))
+		}
+	}
+
+	// Download counts reach search as they're written.
+	d := &Downloads{Registry: f.reg}
+	d.CountN(host+"/alice/web", "v1.0.0", 5)
+	if err := d.Flush(ctx); err != nil {
+		t.Fatal(err)
+	}
+	hits, _, _ = f.reg.Search(ctx, SearchQuery{Sort: SortDownloads})
+	if hits[0].Path != host+"/alice/web" || hits[0].Downloads30 != 5 {
+		t.Fatalf("by downloads: %+v", hits[0])
+	}
+	// A day later than the 30-day window, the daily refresh drops them.
+	f.reg.Now = func() time.Time { return time.Now().AddDate(0, 0, 31) }
+	if err := f.reg.RefreshDownloads(ctx); err != nil {
+		t.Fatal(err)
+	}
+	hits, _, _ = f.reg.Search(ctx, SearchQuery{Text: "web"})
+	if hits[0].Downloads30 != 0 {
+		t.Errorf("downloads outside the window still counted: %d", hits[0].Downloads30)
+	}
+}
+
+func TestNamespaceModulesPage(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	for _, name := range []string{"c", "a", "b"} {
+		mod := host + "/alice/" + name
+		f.publishFiles(t, mod, "v1.0.0", moduleFiles(mod, "1.22", "Package "+name+".", "", ""))
+		f.publishFiles(t, mod, "v1.1.0", moduleFiles(mod, "1.22", "Package "+name+".", "", ""))
+	}
+	mods, total, err := f.reg.NamespaceModulesPage(ctx, "alice", 2, 0)
+	if err != nil || total != 3 || len(mods) != 2 || mods[0].Path != host+"/alice/a" || mods[1].Versions != 2 || mods[1].Latest != "v1.1.0" {
+		t.Fatalf("page 1 = %+v, total %d, %v", mods, total, err)
+	}
+	if mods, _, _ = f.reg.NamespaceModulesPage(ctx, "alice", 2, 2); len(mods) != 1 || mods[0].Path != host+"/alice/c" {
+		t.Fatalf("page 2 = %+v", mods)
+	}
+	if all, _ := f.reg.NamespaceModules(ctx, "alice"); len(all) != 3 {
+		t.Fatalf("all = %d", len(all))
+	}
+}

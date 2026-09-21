@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -160,6 +161,7 @@ func run() error {
 	playground := flag.String("playground", "https://play.golang.org", "Go Playground that documentation examples open in; empty hides the Run buttons (off with -offline)")
 	publishChecks := flag.Bool("publish-checks", true, "scan uploads before publishing: refuse compiled programs, and send code that runs on import, encoded blobs and look-alike names for review")
 	listingCache := flag.Duration("listing-cache", 30*time.Second, "how long the home page's listings and registry totals are cached; 0 turns caching off")
+	debugAddr := flag.String("debug-addr", "", "serve Go profiling (net/http/pprof) on this address, e.g. localhost:6060; keep it off the public network")
 	verbose := flag.Bool("v", false, "log debug messages")
 	flag.Parse()
 	if err := flagsFromEnv(flag.CommandLine, os.Getenv); err != nil {
@@ -321,6 +323,18 @@ func run() error {
 		log.Warn(w)
 	}
 
+	if *debugAddr != "" {
+		if host, _, err := net.SplitHostPort(*debugAddr); err != nil || !isLoopback(host) {
+			return fmt.Errorf("-debug-addr %q must be a loopback address like localhost:6060: profiles expose internals", *debugAddr)
+		}
+		go func() {
+			log.Info("profiling on", "addr", "http://"+*debugAddr+"/debug/pprof/")
+			if err := http.ListenAndServe(*debugAddr, debugMux()); err != nil {
+				log.Error("profiling server", "err", err)
+			}
+		}()
+	}
+
 	errc := make(chan error, 1)
 	go func() {
 		log.Info("gopherdex listening", "version", version.String(),
@@ -432,4 +446,23 @@ func launchWarnings(site *url.URL, smtpAddr, admins, backupDir string, trustProx
 		w = append(w, "listening on loopback behind what looks like a reverse proxy, without -trust-proxy: rate limits will treat every visitor as the proxy")
 	}
 	return w
+}
+
+// debugMux serves net/http/pprof's handlers, only on -debug-addr.
+func debugMux() *http.ServeMux {
+	m := http.NewServeMux()
+	m.HandleFunc("/debug/pprof/", pprof.Index)
+	m.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	m.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	m.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	m.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	return m
+}
+
+func isLoopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

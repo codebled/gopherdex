@@ -151,14 +151,19 @@ func (r *Registry) reindex(ctx context.Context, moduleID int64) error {
 			deprecated = 1
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO module_meta (module_id, path, namespace, version, synopsis, license, go_version, go_num,
-				published_at, created_at, deprecated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			moduleID, modPath, namespace, latest, v.synopsis, v.license, v.goVersion, GoNum(v.goVersion), v.published, created, deprecated); err != nil {
+				published_at, created_at, deprecated, downloads_30d) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+				COALESCE((SELECT SUM(count) FROM downloads WHERE module_id = ? AND day > ?), 0))`,
+			moduleID, modPath, namespace, latest, v.synopsis, v.license, v.goVersion, GoNum(v.goVersion), v.published, created, deprecated,
+			moduleID, r.downloadWindowStart()); err != nil {
 			return fmt.Errorf("reindex %s: %w", modPath, err)
 		}
 		prefix, pathMajor, _ := xmodule.SplitPathVersion(modPath)
 		name := path.Base(prefix) + " " + strings.TrimPrefix(pathMajor, "/")
+		// The path is indexed without the registry's host, which every
+		// module shares: otherwise "go" or "dev" would match them all.
+		_, indexedPath, _ := strings.Cut(modPath, "/")
 		if _, err := tx.ExecContext(ctx, `INSERT INTO module_fts (rowid, path, name, synopsis, readme) VALUES (?, ?, ?, ?, ?)`,
-			moduleID, modPath, name, v.synopsis+" "+deprecation, v.readme); err != nil {
+			moduleID, indexedPath, name, v.synopsis+" "+deprecation, v.readme); err != nil {
 			return fmt.Errorf("reindex %s: %w", modPath, err)
 		}
 	}
@@ -273,65 +278,126 @@ type SearchHit struct {
 }
 
 // Search finds modules. Words match as prefixes anywhere in the module
-// path, name, summary or README, with path and name weighted highest.
+// path, name, summary or README.
+//
+// By relevance, modules whose path, name or summary match come first, then
+// those that match only in their README, each ranked by BM25 with ties
+// going to the more downloaded module. Ranking only the first tier keeps
+// broad queries cheap: "client" might appear in half the READMEs, but in
+// far fewer names.
 func (r *Registry) Search(ctx context.Context, q SearchQuery) ([]SearchHit, int, error) {
-	match := ftsQuery(q.Text)
+	match := ftsQuery(r.searchText(q.Text))
 	if q.Limit <= 0 || q.Limit > 100 {
 		q.Limit = 20
 	}
-	since := r.now().AddDate(0, 0, -30).Unix() / 86400
-
-	var where []string
+	var filters []string
 	var args []any
-	from := `module_meta mm`
-	rank := "0"
-	if match != "" {
-		from = `module_fts JOIN module_meta mm ON mm.module_id = module_fts.rowid`
-		where = append(where, `module_fts MATCH ?`)
-		args = append(args, match)
-		rank = `bm25(module_fts, 10.0, 12.0, 4.0, 1.0)`
-	}
 	if q.License != "" {
-		where = append(where, `(',' || mm.license || ',') LIKE ?`)
+		filters = append(filters, `(',' || mm.license || ',') LIKE ?`)
 		args = append(args, "%,"+likeEscape(q.License)+",%")
 	}
 	if n := GoNum(q.GoMax); n > 0 {
-		where = append(where, `mm.go_num BETWEEN 1 AND ?`)
+		filters = append(filters, `mm.go_num BETWEEN 1 AND ?`)
 		args = append(args, n)
 	}
 	if q.UpdatedWithin > 0 {
-		where = append(where, `mm.published_at >= ?`)
+		filters = append(filters, `mm.published_at >= ?`)
 		args = append(args, r.now().Add(-q.UpdatedWithin).Unix())
 	}
 	if q.HideDeprecated {
-		where = append(where, `mm.deprecated = 0`)
+		filters = append(filters, `mm.deprecated = 0`)
 	}
-	cond := ""
-	if len(where) > 0 {
-		cond = " WHERE " + strings.Join(where, " AND ")
+	// where builds a WHERE clause, optionally with an FTS match first.
+	where := func(fts string) (string, []any) {
+		conds, all := filters, args
+		if fts != "" {
+			conds = append([]string{`module_fts MATCH ?`}, filters...)
+			all = append([]any{fts}, args...)
+		}
+		if len(conds) == 0 {
+			return "", all
+		}
+		return " WHERE " + strings.Join(conds, " AND "), all
+	}
+	const ftsFrom = `module_fts JOIN module_meta mm ON mm.module_id = module_fts.rowid`
+	count := func(fts string) (int, error) {
+		from := `module_meta mm`
+		if fts != "" {
+			from = ftsFrom
+		}
+		cond, a := where(fts)
+		var n int
+		err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+from+cond, a...).Scan(&n)
+		return n, err
+	}
+	page := func(fts, order string, limit, offset int) ([]SearchHit, error) {
+		from := `module_meta mm`
+		if fts != "" {
+			from = ftsFrom
+		}
+		cond, a := where(fts)
+		return r.searchRows(ctx, `SELECT mm.path, mm.namespace, mm.version, mm.synopsis, mm.published_at, mm.created_at,
+				mm.license, mm.go_version, mm.deprecated, mm.downloads_30d
+			FROM `+from+cond+` ORDER BY `+order+` LIMIT ? OFFSET ?`, append(a, limit, offset)...)
 	}
 
-	var total int
-	if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM `+from+cond, args...).Scan(&total); err != nil {
+	total, err := count(match)
+	if err != nil {
 		return nil, 0, fmt.Errorf("search: %w", err)
+	}
+	if match != "" && (q.Sort == SortRelevance || q.Sort == "") {
+		const byRank = `bm25(module_fts, 10.0, 12.0, 4.0, 1.0), mm.downloads_30d DESC, mm.published_at DESC`
+		head := `{path name synopsis} : (` + match + `)`
+		headTotal, err := count(head)
+		if err != nil {
+			return nil, 0, fmt.Errorf("search: %w", err)
+		}
+		hits := []SearchHit{}
+		if q.Offset < headTotal {
+			if hits, err = page(head, byRank, q.Limit, q.Offset); err != nil {
+				return nil, 0, err
+			}
+		}
+		if len(hits) < q.Limit && total > headTotal {
+			tail, err := page(`(`+match+`) NOT (`+head+`)`, byRank, q.Limit-len(hits), max(0, q.Offset-headTotal))
+			if err != nil {
+				return nil, 0, err
+			}
+			hits = append(hits, tail...)
+		}
+		return hits, total, nil
 	}
 
 	order := map[Sort]string{
-		SortRelevance: `rank, downloads DESC, mm.published_at DESC`,
-		SortDownloads: `downloads DESC, rank, mm.published_at DESC`,
+		SortDownloads: `mm.downloads_30d DESC, mm.published_at DESC, mm.module_id DESC`,
 		SortUpdated:   `mm.published_at DESC, mm.module_id DESC`,
 		SortNew:       `mm.created_at DESC, mm.module_id DESC`,
 	}[q.Sort]
-	if order == "" || (q.Sort == SortRelevance && match == "") {
+	if order == "" {
 		order = `mm.published_at DESC, mm.module_id DESC`
 	}
-	query := `SELECT mm.path, mm.namespace, mm.version, mm.synopsis, mm.published_at, mm.created_at, mm.license, mm.go_version, mm.deprecated,
-			COALESCE((SELECT SUM(d.count) FROM downloads d WHERE d.module_id = mm.module_id AND d.day > ?), 0) AS downloads,
-			` + rank + ` AS rank
-		FROM ` + from + cond + ` ORDER BY ` + order + ` LIMIT ? OFFSET ?`
-	rows, err := r.DB.QueryContext(ctx, query, append(append([]any{since}, args...), q.Limit, q.Offset)...)
+	hits, err := page(match, order, q.Limit, q.Offset)
+	return hits, total, err
+}
+
+// searchText drops a leading URL scheme and the registry's own host, so
+// pasting a full module path finds the module: paths are indexed without
+// the host.
+func (r *Registry) searchText(text string) string {
+	t := strings.TrimSpace(text)
+	t = strings.TrimPrefix(strings.TrimPrefix(t, "https://"), "http://")
+	if r.ModuleHost != "" {
+		if rest, ok := strings.CutPrefix(t, r.ModuleHost); ok && (rest == "" || rest[0] == '/') {
+			t = strings.TrimPrefix(rest, "/")
+		}
+	}
+	return t
+}
+
+func (r *Registry) searchRows(ctx context.Context, query string, args ...any) ([]SearchHit, error) {
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("search: %w", err)
+		return nil, fmt.Errorf("search: %w", err)
 	}
 	defer rows.Close()
 	hits := []SearchHit{}
@@ -339,16 +405,15 @@ func (r *Registry) Search(ctx context.Context, q SearchQuery) ([]SearchHit, int,
 		var h SearchHit
 		var published, created int64
 		var deprecated int
-		var rankValue float64
 		if err := rows.Scan(&h.Path, &h.Namespace, &h.Version, &h.Synopsis, &published, &created, &h.License, &h.GoVersion, &deprecated,
-			&h.Downloads30, &rankValue); err != nil {
-			return nil, 0, fmt.Errorf("search: %w", err)
+			&h.Downloads30); err != nil {
+			return nil, fmt.Errorf("search: %w", err)
 		}
 		h.PublishedAt, h.CreatedAt = time.Unix(published, 0).UTC(), time.Unix(created, 0).UTC()
 		h.Deprecated = deprecated == 1
 		hits = append(hits, h)
 	}
-	return hits, total, rows.Err()
+	return hits, rows.Err()
 }
 
 // ftsQuery turns what someone typed into a safe FTS5 query: every word

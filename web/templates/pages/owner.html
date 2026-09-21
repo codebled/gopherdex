@@ -5,7 +5,7 @@
       <div>
         <p class="kicker">{{if .Org}}Organization{{else}}Publisher{{end}}</p>
         <h1>{{if .Org}}{{with .Org.DisplayName}}<span class="display-name">{{.}}</span> {{end}}{{end}}@{{.Namespace}}</h1>
-        <p class="muted">{{len .Modules}} module{{if ne (len .Modules) 1}}s{{end}} published{{if .Org}} · {{len .Members}} member{{if ne (len .Members) 1}}s{{end}}{{end}}</p>
+        <p class="muted">{{.Total}} module{{if ne .Total 1}}s{{end}} published{{if .Org}} · {{len .Members}} member{{if ne (len .Members) 1}}s{{end}}{{end}}</p>
       </div>
       <div class="namespace-card">
         <span class="muted">Modules install as</span>
@@ -29,6 +29,13 @@
       </li>
       {{end}}
     </ul>
+    {{if gt .Pages 1}}
+    <nav class="pager owner-pager" aria-label="Pages">
+      {{with .PrevURL}}<a class="btn btn-outline btn-sm" href="{{.}}">← Previous</a>{{else}}<span></span>{{end}}
+      <span class="muted">Page {{.Page}} of {{.Pages}}</span>
+      {{with .NextURL}}<a class="btn btn-outline btn-sm" href="{{.}}">Next →</a>{{else}}<span></span>{{end}}
+    </nav>
+    {{end}}
     {{else if .Org}}
     <p class="empty">No modules yet. Members publish under <code>{{$.ModuleHost}}/{{.Namespace}}/&lt;module&gt;</code>.</p>
     {{else}}

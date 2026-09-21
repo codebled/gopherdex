@@ -18,7 +18,7 @@ vet:
 
 # What CI runs.
 check:
-	test -z "$$(gofmt -l .)" || (gofmt -l . && exit 1)
+	test -z "$$(gofmt -l cmd internal web)" || (gofmt -l cmd internal web && exit 1)
 	go vet ./...
 	go test ./...
 

@@ -337,10 +337,17 @@ func (s *server) handleV1Owner(w http.ResponseWriter, r *http.Request) {
 	} else if isOrg {
 		kind = "organization"
 	}
-	mods, err := s.registry.NamespaceModules(ctx, name)
+	const perPage = 100
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	page = max(page, 1)
+	mods, total, err := s.registry.NamespaceModulesPage(ctx, name, perPage, (page-1)*perPage)
 	if err != nil {
 		s.apiError(w, r, err)
 		return
+	}
+	next := ""
+	if page*perPage < total {
+		next = s.siteURL + "/api/v1/owners/" + name + "?page=" + strconv.Itoa(page+1)
 	}
 	type ownedModule struct {
 		Path        string    `json:"path"`
@@ -353,8 +360,10 @@ func (s *server) handleV1Owner(w http.ResponseWriter, r *http.Request) {
 		Name    string        `json:"name"`
 		Kind    string        `json:"kind"`
 		URL     string        `json:"url"`
+		Total   int           `json:"total"` // modules in all; Modules holds up to 100
+		Next    string        `json:"next,omitempty"`
 		Modules []ownedModule `json:"modules"`
-	}{name, kind, s.siteURL + "/" + name, []ownedModule{}}
+	}{name, kind, s.siteURL + "/" + name, total, next, []ownedModule{}}
 	for _, m := range mods {
 		out.Modules = append(out.Modules, ownedModule{m.Path, m.Latest, m.Versions, m.PublishedAt, s.siteURL + s.project.URL(m.Path, "")})
 	}

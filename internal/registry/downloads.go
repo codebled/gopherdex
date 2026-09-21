@@ -17,10 +17,11 @@ type Downloads struct {
 	Registry *Registry
 	Every    time.Duration // flush interval; default 15s
 
-	mu      sync.Mutex
-	pending map[downloadKey]int
-	stop    chan struct{}
-	done    chan struct{}
+	mu        sync.Mutex
+	pending   map[downloadKey]int
+	refreshed int64 // the day module_meta.downloads_30d was last recomputed for everyone
+	stop      chan struct{}
+	done      chan struct{}
 }
 
 type downloadKey struct {
@@ -97,11 +98,21 @@ func (d *Downloads) Flush(ctx context.Context) error {
 			return err
 		}
 		defer tx.Rollback()
+		touched := map[string]bool{}
 		for k, n := range batch {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO downloads (module_id, version, day, count)
 				SELECT id, ?, ?, ? FROM modules WHERE path = ?
 				ON CONFLICT (module_id, version, day) DO UPDATE SET count = count + excluded.count`,
 				k.version, k.day, n, k.module); err != nil {
+				return err
+			}
+			touched[k.module] = true
+		}
+		since := d.Registry.downloadWindowStart()
+		for modPath := range touched {
+			if _, err := tx.ExecContext(ctx, `UPDATE module_meta SET downloads_30d =
+					COALESCE((SELECT SUM(count) FROM downloads WHERE module_id = module_meta.module_id AND day > ?), 0)
+				WHERE module_id = (SELECT id FROM modules WHERE path = ?)`, since, modPath); err != nil {
 				return err
 			}
 		}
@@ -117,6 +128,29 @@ func (d *Downloads) Flush(ctx context.Context) error {
 		}
 		d.mu.Unlock()
 		return fmt.Errorf("write %d download counts: %w", len(batch), err)
+	}
+	// Once a day, days that left the 30-day window come off every module.
+	if today := d.Registry.now().UTC().Unix() / 86400; today != d.refreshed {
+		if err := d.Registry.RefreshDownloads(ctx); err != nil {
+			return err
+		}
+		d.refreshed = today
+	}
+	return nil
+}
+
+// downloadWindowStart is the day before the 30-day download window: counts
+// for days after it are "recent".
+func (r *Registry) downloadWindowStart() int64 {
+	return r.now().AddDate(0, 0, -30).Unix() / 86400
+}
+
+// RefreshDownloads recomputes every module's 30-day download count.
+func (r *Registry) RefreshDownloads(ctx context.Context) error {
+	if _, err := r.DB.ExecContext(ctx, `UPDATE module_meta SET downloads_30d =
+			COALESCE((SELECT SUM(count) FROM downloads WHERE module_id = module_meta.module_id AND day > ?), 0)`,
+		r.downloadWindowStart()); err != nil {
+		return fmt.Errorf("refresh download counts: %w", err)
 	}
 	return nil
 }

@@ -77,8 +77,9 @@ type Config struct {
 }
 
 type server struct {
-	home  cached[indexData]
-	stats cached[registry.Stats]
+	home   cached[indexData]
+	stats  cached[registry.Stats]
+	facets cached[facets]
 
 	disc          *discovery.Service
 	accounts      *accounts.Service
@@ -156,6 +157,7 @@ func New(cfg Config) (http.Handler, error) {
 		mirror:        cfg.Mirror,
 		home:          cached[indexData]{TTL: cfg.ListingCache},
 		stats:         cached[registry.Stats]{TTL: cfg.ListingCache},
+		facets:        cached[facets]{TTL: cfg.ListingCache},
 		loginLimit:    ratelimit.New(10, 5*time.Minute),
 		signupLimit:   ratelimit.New(5, time.Hour),
 		emailLimit:    ratelimit.New(3, time.Hour),
@@ -310,7 +312,7 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/search?"+url.Values{"q": {q}}.Encode(), http.StatusFound)
 		return
 	}
-	data, err := s.home.get(func() (indexData, error) { return s.loadIndex(r.Context()) })
+	data, err := s.home.get(r.Context(), s.loadIndex)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -335,9 +337,22 @@ func (s *server) loadIndex(ctx context.Context) (indexData, error) {
 	return data, err
 }
 
+// facets are the search page's filter counts.
+type facets struct{ licenses, goVersions []registry.Facet }
+
+// searchFacets returns the filter counts, cached like the listings: they
+// take a pass over every module.
+func (s *server) searchFacets(ctx context.Context) ([]registry.Facet, []registry.Facet, error) {
+	f, err := s.facets.get(ctx, func(ctx context.Context) (facets, error) {
+		l, g, err := s.registry.Facets(ctx)
+		return facets{l, g}, err
+	})
+	return f.licenses, f.goVersions, err
+}
+
 // registryStats returns the registry totals, cached like the listings.
 func (s *server) registryStats(ctx context.Context) (registry.Stats, error) {
-	return s.stats.get(func() (registry.Stats, error) { return s.registry.Stats(ctx) })
+	return s.stats.get(ctx, s.registry.Stats)
 }
 
 // handleModules is the old browse page; the search page now lists every
@@ -436,7 +451,7 @@ func (s *server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var err error
-		if data.Licenses, data.GoVersions, err = s.registry.Facets(ctx); err != nil {
+		if data.Licenses, data.GoVersions, err = s.searchFacets(ctx); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -474,7 +489,7 @@ func (s *server) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	if data.Page < data.Pages {
 		data.NextURL = pageURL(data.Page + 1)
 	}
-	if data.Licenses, data.GoVersions, err = s.registry.Facets(ctx); err != nil {
+	if data.Licenses, data.GoVersions, err = s.searchFacets(ctx); err != nil {
 		s.serverError(w, r, err)
 		return
 	}

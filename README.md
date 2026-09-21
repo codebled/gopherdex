@@ -54,6 +54,7 @@ Open http://localhost:8080 and choose **Register**. Without `-smtp-addr`, emails
 | `-backup-dir` / `-backup-every` / `-backup-keep` | (off) / `24h` / `7` | Automatic database backups |
 | `-trusted-publishing` | `true` | Let GitHub Actions workflows publish with OIDC ID tokens. Off with `-offline`, because it fetches GitHub's signing keys |
 | `-oidc-audience` | module host | Audience GitHub ID tokens must be requested for |
+| `-debug-addr` | (none) | Serve Go's profiler (`net/http/pprof`) on this loopback address, e.g. `localhost:6060` |
 | `-listing-cache` | `30s` | How long the home page's listings and registry totals are cached; `0` turns caching off |
 | `-publish-checks` | `true` | Scan uploads before publishing (see **Trust and safety**) |
 | `-playground` | `https://play.golang.org` | Go Playground that documentation examples open in. Empty, or `-offline`, hides the Run buttons |
@@ -144,7 +145,7 @@ Project pages document every package from the published zip, using `go/doc` and 
 | `GET /api/v1/modules/{module}` | Latest version, synopsis, licenses, owners, every version (yanked, retracted, verified), downloads, "used by", advisories, links |
 | `GET /api/v1/modules/{module}/@v/{version}` | Requirements, packages, checksums, size, provenance, advisories affecting it, download links |
 | `GET /api/v1/search?q=&sort=&page=&per_page=` | Hosted modules matching `q` |
-| `GET /api/v1/owners/{name}` | A user's or organization's modules |
+| `GET /api/v1/owners/{name}` | A user's or organization's modules, 100 per page (`?page=`), with `total` and a `next` link |
 | `GET /api/v1/stats` | Registry totals and where its GOPROXY and vulnerability database live |
 
 `{module}` can be the full path or `owner/name`. The older `/api/search` and `/api/modules/…` endpoints behind the search page are internal and may change.
@@ -375,21 +376,32 @@ make bench-load                 # 32 clients for 60 seconds
 
 Each client sends a different `X-Forwarded-For` address, so run the server with `-trust-proxy` to load it as many users would, instead of tripping one client's rate limits. The report gives requests per second, errors, and p50/p90/p99/max latency per scenario. `-mix only=search` isolates one scenario, `-rps` fixes the request rate, and `-out` saves JSON. It refuses non-local servers unless given `-i-own-this-server`.
 
-**Results** on an Apple-silicon laptop, small dataset, 32 clients, 60 seconds:
+**Results** on an Apple-silicon laptop, 32 clients, 60 seconds, zero errors in every final run:
 
-| | Before tuning | After tuning |
-|---|---|---|
-| Throughput | 50 req/s | 1,511 req/s |
-| p50 / p99, all requests | 22 ms / 3.08 s | 15 ms / 91 ms |
-| Project page p50 | 1.54 s | 21 ms |
-| Home page p50 | 1.15 s | 0.4 ms |
-| GOPROXY requests p50 | 1–2 ms | 2–4 ms |
-| Publish, per version | 7 ms p50, 17 ms p99 | |
+| | 5,000 modules, before tuning | 5,000 modules, after | 100,000 modules / 1M versions, before | 100,000 / 1M, after |
+|---|---|---|---|---|
+| Throughput | 50 req/s | 1,511 req/s | 205 req/s | 1,294 req/s |
+| p50 / p99, all requests | 22 ms / 3.08 s | 15 ms / 91 ms | 93 ms / 1.05 s | 15 ms / 168 ms |
+| Project page p50 | 1.54 s | 21 ms | 114 ms | 26 ms |
+| Search p50 | 23 ms | 39 ms | 382 ms | 18 ms |
+| Home page p90 | 1.20 s | 0.5 ms | 4.38 s | 0.9 ms |
+| GOPROXY requests p50 | 1–2 ms | 2–4 ms | 2–3 ms | 4–7 ms |
 
-What the first run found, and what fixed it:
-- **"Used by" counts** found every module's latest release before counting a module's dependents: about 50 ms at 5,000 modules, and growing with the registry. They now start from the few versions that require the module and check each against a new index, `versions_latest`.
-- **The home page** ranked every module by downloads and counted every version on each view. Its listings and the registry totals are now cached for `-listing-cache` (30 seconds by default), and concurrent requests share one load.
-- **Name checks at publish** ranked every module by downloads for each new module. On registries large enough for this to cost anything, the ranking is now reused for 10 minutes.
+Publishing held steady at about 8 ms per version (p99 36 ms) from the first module to the millionth. Building the full dataset takes about three hours.
+
+What load testing found, and what fixed it:
+- **"Used by" counts** found every module's latest release before counting a module's dependents: 50 ms at 5,000 modules, and growing. They now start from the few versions that require the module and check each against a new index, `versions_latest`.
+- **Major version links** on every project page (`…/v2`, `…/v3`) used `LIKE`, which SQLite can't answer from an index. That made the page scan every module: 68% of all server CPU at 100,000 modules. The lookup is now an index range, 24 ms down to 0.03 ms.
+- **Reads** spent three quarters of the CPU in `pread` system calls, one per database page. The database is now memory-mapped (`mmap_size`), so reads come straight from the OS page cache.
+- **Search** summed 30 days of downloads for every match of every query, and scored every README match. Each module now keeps its 30-day count, updated as downloads are written and recomputed daily. Modules whose path, name or summary match are ranked first; README-only matches follow, and are only ranked when someone pages that far.
+- **The module host was indexed** in every path, so "go" or "dev" matched every module on `gopherdex.dev`. Paths are indexed without it, and a pasted full module path still finds the module.
+- **The home page, registry totals and search filter counts** took a pass over every module per view. They're cached for `-listing-cache` (30 seconds by default). When the cache expires, visitors get the cached copy while one background refresh runs, so nobody waits.
+- **Owner pages** listed every module: 5,487 modules, 2 MB of HTML and 0.74 s for the busiest namespace. They now show 60 at a time, and `/api/v1/owners/{name}` returns 100 per page with `total` and `next`.
+- **Name checks at publish** ranked every module by downloads for each new module. On large registries the ranking is reused for 10 minutes.
+
+Still open: feeds for the largest namespaces (p99 1.6 s under load) and very broad searches such as "go" (about 0.2 s).
+
+**Profiling.** `-debug-addr localhost:6060` serves Go's profiler (`net/http/pprof`) on a loopback address only. For example, `go tool pprof http://localhost:6060/debug/pprof/profile?seconds=20` while `gdxbench load` runs.
 
 ## Accounts and API tokens
 

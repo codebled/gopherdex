@@ -634,8 +634,26 @@ type ModuleSummary struct {
 
 // NamespaceModules lists the modules in a namespace, sorted by path.
 func (r *Registry) NamespaceModules(ctx context.Context, namespace string) ([]ModuleSummary, error) {
+	return r.namespaceModules(ctx, namespace, -1, 0)
+}
+
+// NamespaceModulesPage is one page of NamespaceModules, and how many
+// modules there are in all. Busy namespaces have thousands.
+func (r *Registry) NamespaceModulesPage(ctx context.Context, namespace string, limit, offset int) ([]ModuleSummary, int, error) {
+	var total int
+	if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM modules WHERE namespace = ? AND quarantined_at IS NULL`, namespace).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count modules of %s: %w", namespace, err)
+	}
+	mods, err := r.namespaceModules(ctx, namespace, limit, offset)
+	return mods, total, err
+}
+
+// namespaceModules lists a namespace's modules by path; limit < 0 means all.
+func (r *Registry) namespaceModules(ctx context.Context, namespace string, limit, offset int) ([]ModuleSummary, error) {
 	rows, err := r.DB.QueryContext(ctx, `SELECT m.path, v.version, v.published_at
-		FROM modules m JOIN versions v ON v.module_id = m.id WHERE m.namespace = ? AND m.quarantined_at IS NULL ORDER BY m.path`, namespace)
+		FROM modules m JOIN versions v ON v.module_id = m.id
+		WHERE m.id IN (SELECT id FROM modules WHERE namespace = ? AND quarantined_at IS NULL ORDER BY path LIMIT ? OFFSET ?)
+		ORDER BY m.path`, namespace, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list modules of %s: %w", namespace, err)
 	}
@@ -804,9 +822,12 @@ func (r *Registry) Module(ctx context.Context, modPath string) (*ModuleDetail, e
 // …/retry, …/retry/v2, …/retry/v3, lowest first.
 func (r *Registry) MajorVersions(ctx context.Context, modPath string) ([]string, error) {
 	base, _, _ := xmodule.SplitPathVersion(modPath)
+	// A range on the path index, not LIKE: SQLite can't use an index for
+	// LIKE here, and scanning every module made this most of a project
+	// page's cost at 100,000 modules.
 	rows, err := r.DB.QueryContext(ctx, `SELECT m.path FROM modules m
-		WHERE (m.path = ? OR m.path LIKE ? ESCAPE '\') AND EXISTS (SELECT 1 FROM versions v WHERE v.module_id = m.id)`,
-		base, likeEscape(base)+"/v%")
+		WHERE (m.path = ? OR (m.path >= ? AND m.path < ?)) AND EXISTS (SELECT 1 FROM versions v WHERE v.module_id = m.id)`,
+		base, base+"/v", base+"/w")
 	if err != nil {
 		return nil, fmt.Errorf("list major versions of %s: %w", base, err)
 	}

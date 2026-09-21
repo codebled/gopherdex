@@ -23,6 +23,10 @@ func TestOpenMigratesOnce(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `PRAGMA journal_mode`).Scan(&mode); err != nil || mode != "wal" {
 		t.Fatalf("journal_mode = %q, %v; want wal", mode, err)
 	}
+	var mmap int64
+	if err := db.QueryRowContext(ctx, `PRAGMA mmap_size`).Scan(&mmap); err != nil || mmap < 1<<30 {
+		t.Fatalf("mmap_size = %d, %v; want memory-mapped reads", mmap, err)
+	}
 	db.Close()
 
 	// Reopening must not re-run migrations.

@@ -98,9 +98,26 @@ func Zip(zipFile, prefix string) ([]Finding, error) {
 				Message: fmt.Sprintf("%s binary in the module. %s", kind, why)})
 			continue
 		}
-		isGo := strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !inTestdata
-		if !isGo || f.UncompressedSize64 > maxGoFile {
+		if ext := path.Ext(name); (ext == ".syso" || ext == ".o" || ext == ".a") && !inTestdata {
+			// The go command links .syso files into every build of the
+			// package, so compiled code can hide in one without an
+			// executable header. Legitimate uses exist (Windows icons and
+			// manifests), so they're reviewed rather than refused.
 			rc.Close()
+			out = append(out, Finding{Rule: "object-file", Severity: Warn, File: name,
+				Message: "Precompiled object file. The go command links .syso files into builds, so it could carry compiled code; it's allowed but reviewed."})
+			continue
+		}
+		isGo := strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go") && !inTestdata
+		if !isGo {
+			rc.Close()
+			continue
+		}
+		if f.UncompressedSize64 > maxGoFile {
+			// Too big to check, which is exactly how code would hide.
+			rc.Close()
+			out = append(out, Finding{Rule: "unscanned", Severity: Warn, File: name,
+				Message: fmt.Sprintf("Go file of %d MB is too large to scan for code that runs on import; it's allowed but reviewed.", f.UncompressedSize64>>20)})
 			continue
 		}
 		rest, err := io.ReadAll(io.LimitReader(rc, maxGoFile))

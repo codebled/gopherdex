@@ -29,6 +29,8 @@ func TestTeamsOverHTTP(t *testing.T) {
 	resp, body := alice.post("/-/orgs", url.Values{"org": {"acme"}})
 	expect(t, resp, body, http.StatusSeeOther, "")
 	alice.post("/-/orgs/members", url.Values{"org": {"acme"}, "username": {"bob"}, "role": {"member"}})
+	resp, body = bob.post("/account/invitations/accept", url.Values{"kind": {"organization"}, "name": {"acme"}})
+	expect(t, resp, body, http.StatusSeeOther, "")
 	env.publish(t, "gopherdex.test/acme/api", "v1.0.0")
 
 	// Create a team; it opens on its own page.

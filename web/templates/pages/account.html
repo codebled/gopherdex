@@ -18,6 +18,30 @@
     {{with .Error}}<p class="notice danger" role="alert">{{.}}</p>{{end}}
 
     <div class="account-grid">
+      {{if .Invitations}}
+      <section class="panel invitations-panel" aria-labelledby="invitations-title">
+        <div class="panel-head"><h2 id="invitations-title">Invitations</h2><p>Nothing changes until you accept.</p></div>
+        <ul class="collab-list">
+          {{range .Invitations}}
+          <li>
+            <span>{{with .InvitedBy}}<a href="/{{.}}">@{{.}}</a>{{else}}Someone{{end}} invited you to be {{if eq .Role "owner"}}an{{else}}a{{end}} <strong>{{.Role}}</strong> of
+              {{if eq .Kind "organization"}}the organization <a href="/{{.Name}}">@{{.Name}}</a>{{else}}<code>{{.Name}}</code>{{end}}
+              <span class="muted small">· {{since .Since}}</span></span>
+            <span class="invite-actions">
+              <form class="inline-form" action="/account/invitations/accept" method="post">
+                <input type="hidden" name="kind" value="{{.Kind}}"><input type="hidden" name="name" value="{{.Name}}">
+                <button class="btn btn-primary btn-sm" type="submit">Accept</button>
+              </form>
+              <form class="inline-form" action="/account/invitations/decline" method="post">
+                <input type="hidden" name="kind" value="{{.Kind}}"><input type="hidden" name="name" value="{{.Name}}">
+                <button class="btn btn-outline btn-sm" type="submit">Decline</button>
+              </form>
+            </span>
+          </li>
+          {{end}}
+        </ul>
+      </section>
+      {{end}}
       <section class="panel" aria-labelledby="email-title">
         <div class="panel-head"><h2 id="email-title">Email</h2>
           {{if .User.EmailVerified}}<span class="pill p-latest">Verified</span>{{else}}<span class="pill p-pre">Not verified</span>{{end}}
@@ -30,7 +54,12 @@
           <p class="muted">Open the link we emailed you to confirm this address. You need a confirmed email before you can create API tokens.</p>
           <form action="/account/email/resend" method="post"><button class="btn btn-outline btn-sm" type="submit">Resend the link</button></form>
           {{end}}
-          {{with .PendingEmail}}<p class="notice" role="status">Waiting for you to open the link sent to <strong>{{.}}</strong>. Your address changes once you do.</p>{{end}}
+          {{with .PendingEmail}}
+          <div class="notice pending-email" role="status">
+            <p>Waiting for you to open the link sent to <strong>{{.}}</strong>. Your address changes once you do.</p>
+            <form action="/account/email/cancel" method="post"><button class="btn btn-link" type="submit">Cancel this change</button></form>
+          </div>
+          {{end}}
 
           <details class="settings-details"{{if or .Errors.new_email .Errors.current_password}} open{{end}}>
             <summary>Change email address</summary>
@@ -96,7 +125,8 @@ gopherdex publish</pre></li>
         <div class="panel-head"><h2 id="orgs-title">Organizations</h2><p>Shared namespaces for teams</p></div>
         {{if .Memberships}}
         <ul class="module-list">
-          {{range .Memberships}}<li><a href="/{{.Org}}"><code>{{$.Data.Host}}/{{.Org}}/</code></a><span class="muted">{{.Role}}</span></li>{{end}}
+          {{range .Memberships}}<li><a href="/{{.Org}}"><code>{{$.Data.Host}}/{{.Org}}/</code></a><span class="muted">{{.Role}}</span>
+            <form class="inline-form" action="/-/orgs/leave" method="post"><input type="hidden" name="org" value="{{.Org}}"><button class="btn btn-link" type="submit" aria-label="Leave @{{.Org}}">Leave</button></form></li>{{end}}
         </ul>
         {{end}}
         {{if .User.EmailVerified}}
@@ -149,6 +179,12 @@ gopherdex publish</pre></li>
               <option value="365">In 1 year</option>
               <option value="0">Never</option>
             </select>
+          </div>
+          <div class="field">
+            <label for="token-password">Your password</label>
+            <input id="token-password" name="password" type="password" autocomplete="current-password" required
+              {{with .Errors.token_password}}aria-invalid="true" aria-describedby="token-password-error"{{end}}>
+            {{with .Errors.token_password}}<p class="field-error" id="token-password-error">{{.}}</p>{{end}}
           </div>
           <button class="btn btn-primary" type="submit">Create token</button>
         </form>

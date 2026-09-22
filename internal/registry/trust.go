@@ -51,10 +51,11 @@ func (r *Registry) quarantined(ctx context.Context, modPath string) (bool, error
 // member access is "none").
 func (r *Registry) Maintainers(ctx context.Context, modPath string) ([]string, error) {
 	rows, err := r.DB.QueryContext(ctx, `
-		SELECT u.username FROM module_roles mr JOIN modules m ON m.id = mr.module_id JOIN users u ON u.id = mr.user_id WHERE m.path = ?
+		SELECT u.username FROM module_roles mr JOIN modules m ON m.id = mr.module_id JOIN users u ON u.id = mr.user_id
+			WHERE m.path = ? AND mr.accepted_at IS NOT NULL
 		UNION
 		SELECT u.username FROM modules m JOIN organizations o ON o.name = m.namespace JOIN org_members om ON om.org_id = o.id
-			JOIN users u ON u.id = om.user_id WHERE m.path = ? AND (om.role = 'owner' OR o.member_access = 'maintainer')
+			JOIN users u ON u.id = om.user_id WHERE m.path = ? AND om.accepted_at IS NOT NULL AND (om.role = 'owner' OR o.member_access = 'maintainer')
 		UNION
 		SELECT u.username FROM modules m JOIN team_modules tm ON tm.module_id = m.id JOIN team_members tu ON tu.team_id = tm.team_id
 			JOIN users u ON u.id = tu.user_id WHERE m.path = ?

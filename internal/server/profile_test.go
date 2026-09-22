@@ -38,6 +38,21 @@ func TestAccountSettings(t *testing.T) {
 	expect(t, resp, body, http.StatusSeeOther, "")
 	resp, body = alice.get("/account?done=email-change-sent")
 	expect(t, resp, body, http.StatusOK, "Waiting for you to open the link sent to <strong>alice@new.example</strong>")
+	// A change can be cancelled; its link stops working.
+	stale := regexp.MustCompile(`/verify-email\?token=\S+`).FindString(env.mails.find(t, "alice@new.example", "Confirm your new email"))
+	resp, body = alice.post("/account/email/cancel", nil)
+	expect(t, resp, body, http.StatusSeeOther, "")
+	resp, body = alice.get("/account?done=email-cancelled")
+	expect(t, resp, body, http.StatusOK, "Email change cancelled")
+	if strings.Contains(body, "Waiting for you to open") {
+		t.Error("cancelled change still shown")
+	}
+	resp, _ = alice.get(stale)
+	if loc := resp.Header.Get("Location"); loc == "/account?done=email-changed" {
+		t.Fatal("a cancelled change's link still changed the address")
+	}
+	env.mails.reset()
+	alice.post("/account/email", url.Values{"new_email": {"alice@new.example"}, "current_password": {"correct horse battery"}})
 	link := regexp.MustCompile(`/verify-email\?token=\S+`).FindString(env.mails.find(t, "alice@new.example", "Confirm your new email"))
 	resp, _ = alice.get(link)
 	if loc := resp.Header.Get("Location"); loc != "/account?done=email-changed" {
@@ -68,7 +83,7 @@ func TestAccountSettings(t *testing.T) {
 	}
 	resp, body = alice.post("/-/collaborators", url.Values{"module": {mod}, "username": {"@Bob"}, "role": {"maintainer"}})
 	expect(t, resp, body, http.StatusSeeOther, "")
-	if msg := env.mails.find(t, "bob@example.com", "You're now a maintainer of "+mod); !strings.Contains(msg, "@alice made you a maintainer") {
+	if msg := env.mails.find(t, "bob@example.com", "@alice invited you to "+mod); !strings.Contains(msg, "@alice invited you to be a maintainer") || !strings.Contains(msg, "/account") {
 		t.Errorf("access email:\n%s", msg)
 	}
 

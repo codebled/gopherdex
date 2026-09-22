@@ -146,7 +146,7 @@ func TestDeleteAccount(t *testing.T) {
 	db := s.DB
 	db.ExecContext(ctx, `INSERT INTO namespaces (name, kind, created_at) VALUES ('acme', 'org', 1)`)
 	db.ExecContext(ctx, `INSERT INTO organizations (id, name, display_name, created_by, created_at) VALUES (1, 'acme', 'Acme', ?, 1)`, alice.ID)
-	if _, err := db.ExecContext(ctx, `INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (1, ?, 'owner', 1)`, alice.ID); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO org_members (org_id, user_id, role, created_at, accepted_at) VALUES (1, ?, 'owner', 1, 1)`, alice.ID); err != nil {
 		t.Fatal(err)
 	}
 	var last *ErrLastOrgOwner

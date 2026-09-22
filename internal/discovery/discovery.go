@@ -8,6 +8,7 @@
 package discovery
 
 import (
+	"container/list"
 	"context"
 	"errors"
 	"fmt"
@@ -119,8 +120,60 @@ type Service struct {
 	ProxyPrefix string       // URL prefix of this registry's GOPROXY, e.g. "/api/proxy"
 	DocsBase    string       // e.g. "https://pkg.go.dev"
 	Log         *slog.Logger
+	// ModuleHost is this registry's module host. Its paths are never looked
+	// up publicly: a quarantined module would otherwise come back from the
+	// mirror's cache.
+	ModuleHost string
 
-	docs sync.Map // "path@version" → docEntry; hosted versions are immutable
+	// HostedSearch finds modules hosted here, e.g. from the registry's
+	// full-text index. Nil leaves hosted modules out of Search.
+	HostedSearch func(ctx context.Context, query string, limit int) ([]Result, error)
+
+	docs docCache // "path@version" → docEntry; hosted versions are immutable
+}
+
+// docCache keeps the docs of recently viewed hosted versions. It is bounded:
+// anyone can ask for any module, and docs are large.
+type docCache struct {
+	mu    sync.Mutex
+	order *list.List // front = most recently used; values are *docItem
+	items map[string]*list.Element
+}
+
+type docItem struct {
+	key string
+	e   docEntry
+}
+
+const docCacheSize = 256
+
+func (c *docCache) get(key string) (docEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if el, ok := c.items[key]; ok {
+		c.order.MoveToFront(el)
+		return el.Value.(*docItem).e, true
+	}
+	return docEntry{}, false
+}
+
+func (c *docCache) put(key string, e docEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.items == nil {
+		c.items, c.order = map[string]*list.Element{}, list.New()
+	}
+	if el, ok := c.items[key]; ok {
+		el.Value.(*docItem).e = e
+		c.order.MoveToFront(el)
+		return
+	}
+	c.items[key] = c.order.PushFront(&docItem{key, e})
+	for c.order.Len() > docCacheSize {
+		old := c.order.Back()
+		c.order.Remove(old)
+		delete(c.items, old.Value.(*docItem).key)
+	}
 }
 
 type docEntry struct {
@@ -134,27 +187,6 @@ func (s *Service) log() *slog.Logger {
 		return s.Log
 	}
 	return slog.Default()
-}
-
-// HostedModules lists modules served by this registry with their latest
-// version and synopsis.
-func (s *Service) HostedModules(ctx context.Context) ([]Result, error) {
-	paths, err := s.Local.Modules(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := []Result{}
-	for _, p := range paths {
-		info, err := s.Local.Latest(ctx, p)
-		if errors.Is(err, module.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("latest version of %s: %w", p, err)
-		}
-		out = append(out, Result{Path: p, Version: info.Version, Synopsis: s.synopsis(ctx, p, info.Version), Origin: Hosted})
-	}
-	return out, nil
 }
 
 // Scope limits a search to one source.
@@ -175,16 +207,14 @@ func (s *Service) Search(ctx context.Context, query string, scope Scope) (Search
 	if query == "" {
 		return resp, nil
 	}
-	hosted, err := s.HostedModules(ctx)
-	if err != nil {
-		return resp, err
-	}
 	seen := map[string]bool{}
-	terms := strings.Fields(strings.ToLower(query))
-	for _, r := range hosted {
-		seen[r.Path] = true
-		text := strings.ToLower(r.Path + " " + r.Synopsis)
-		if scope != ScopePublic && !slices.ContainsFunc(terms, func(t string) bool { return !strings.Contains(text, t) }) {
+	if scope != ScopePublic && s.HostedSearch != nil {
+		hosted, err := s.HostedSearch(ctx, query, maxResults)
+		if err != nil {
+			return resp, err
+		}
+		for _, r := range hosted {
+			seen[r.Path] = true
 			resp.Results = append(resp.Results, r)
 		}
 	}
@@ -204,10 +234,15 @@ func (s *Service) Search(ctx context.Context, query string, scope Scope) (Search
 		if len(resp.Results) == maxResults {
 			break
 		}
-		if !seen[r.Path] {
-			seen[r.Path] = true
-			resp.Results = append(resp.Results, r)
+		if seen[r.Path] {
+			continue
 		}
+		seen[r.Path] = true
+		// A module hosted here is never shown as public.
+		if _, err := s.Local.Latest(ctx, r.Path); err == nil || !errors.Is(err, module.ErrNotFound) {
+			continue
+		}
+		resp.Results = append(resp.Results, r)
 	}
 	return resp, nil
 }
@@ -227,7 +262,8 @@ func (s *Service) Module(ctx context.Context, modPath, version string) (*Module,
 	var src ModuleSource = s.Local
 	origin := Hosted
 	versions, err := s.Local.Versions(ctx, modPath)
-	if errors.Is(err, module.ErrNotFound) && s.Public != nil {
+	ours := s.ModuleHost != "" && strings.HasPrefix(modPath, s.ModuleHost+"/")
+	if errors.Is(err, module.ErrNotFound) && s.Public != nil && !ours {
 		src, origin = s.Public, Public
 		versions, err = s.Public.Versions(ctx, modPath)
 		if err != nil && !errors.Is(err, module.ErrNotFound) && ctx.Err() == nil {
@@ -361,8 +397,8 @@ func (s *Service) goMod(ctx context.Context, src ModuleSource, modPath, version 
 
 func (s *Service) localDocs(ctx context.Context, modPath, version string) docEntry {
 	key := modPath + "@" + version
-	if e, ok := s.docs.Load(key); ok {
-		return e.(docEntry)
+	if e, ok := s.docs.get(key); ok {
+		return e
 	}
 	var e docEntry
 	fsys, closer, err := s.Local.VersionFS(ctx, modPath, version)
@@ -377,17 +413,9 @@ func (s *Service) localDocs(ctx context.Context, modPath, version string) docEnt
 		e.pkgs = []godoc.Package{}
 	}
 	if ctx.Err() == nil {
-		s.docs.Store(key, e)
+		s.docs.put(key, e)
 	}
 	return e
-}
-
-func (s *Service) synopsis(ctx context.Context, modPath, version string) string {
-	e := s.localDocs(ctx, modPath, version)
-	if e.err != nil {
-		s.log().Debug("docs unavailable", "module", modPath, "version", version, "err", e.err)
-	}
-	return rootSynopsis(modPath, e.pkgs)
 }
 
 func rootSynopsis(modPath string, pkgs []godoc.Package) string {

@@ -18,7 +18,7 @@ func TestTeams(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"bob", "carol"} {
-		if err := f.reg.SetOrgMember(ctx, f.alice, "acme", name, "member", client); err != nil {
+		if err := f.setOrgMember(ctx, f.alice, "acme", name, "member", client); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -154,7 +154,7 @@ func TestTeams(t *testing.T) {
 	}
 
 	// Deleting a team takes its access away.
-	f.reg.SetOrgMember(ctx, f.alice, "acme", "bob", "member", client)
+	f.setOrgMember(ctx, f.alice, "acme", "bob", "member", client)
 	f.reg.AddTeamMember(ctx, f.alice, "acme", "backend", "bob", client)
 	if role, _ := f.reg.Role(ctx, bob, api); role != RoleOwner {
 		t.Fatalf("rejoined = %v", role)
@@ -168,4 +168,58 @@ func TestTeams(t *testing.T) {
 	if _, err := f.reg.TeamByName(ctx, "acme", "backend"); !isReject(err, http.StatusNotFound, "unknown_team") {
 		t.Fatalf("deleted team: %v", err)
 	}
+}
+
+func TestSecurityReviewAuthorization(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	bob, bobTok := f.user(t, "bob")
+	carol, carolTok := f.user(t, "carol")
+	f.reg.CreateOrg(ctx, f.alice, "acme", "", client)
+	f.setOrgMember(ctx, f.alice, "acme", "bob", "member", client)
+	f.setOrgMember(ctx, f.alice, "acme", "carol", "member", client)
+	f.reg.SetMemberAccess(ctx, f.alice, "acme", MemberAccessNone, client)
+
+	// A member who created a module loses it when removed from the org.
+	lib := host + "/acme/newlib"
+	if err := f.publishAs(t, bob, bobTok, lib, "v1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.reg.RemoveOrgMember(ctx, f.alice, "acme", "bob", client); err != nil {
+		t.Fatal(err)
+	}
+	if role, _ := f.reg.Role(ctx, bob, lib); role != RoleNone {
+		t.Fatalf("removed member keeps %v on the module they created", role)
+	}
+	if err := f.publishAs(t, bob, bobTok, lib, "v1.1.0"); !isReject(err, http.StatusForbidden, "forbidden_module") {
+		t.Fatalf("removed member publishing: %v", err)
+	}
+	// Outside collaborators (never members) keep their direct role.
+	if err := f.setCollaborator(ctx, f.alice, lib, "bob", "maintainer", client); err != nil {
+		t.Fatal(err)
+	}
+	if role, _ := f.reg.Role(ctx, bob, lib); role != RoleMaintainer {
+		t.Fatalf("outside collaborator: %v", role)
+	}
+
+	// A new major version needs rights on the module it continues.
+	api := host + "/acme/api"
+	if err := f.publishAs(t, f.alice, f.token, api, "v1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.publishAs(t, carol, carolTok, api+"/v2", "v2.0.0"); !isReject(err, http.StatusForbidden, "forbidden_module") {
+		t.Fatalf("member without access publishing a new major: %v", err)
+	}
+	if err := f.publishAs(t, f.alice, f.token, api+"/v2", "v2.0.0"); err != nil {
+		t.Fatalf("owner publishing a new major: %v", err)
+	}
+
+	// Quarantined majors aren't linked from the others.
+	if err := f.reg.Quarantine(ctx, f.alice, api+"/v2", "review", client); err != nil {
+		t.Fatal(err)
+	}
+	if majors, _ := f.reg.MajorVersions(ctx, api); len(majors) != 1 || majors[0] != api {
+		t.Fatalf("majors = %v", majors)
+	}
+	_ = carol
 }

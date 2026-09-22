@@ -231,7 +231,7 @@ func (r *Registry) AddTeamMember(ctx context.Context, u *accounts.User, org, tea
 	var userID int64
 	var orgRole sql.NullString
 	err = r.DB.QueryRowContext(ctx, `SELECT u.id, (SELECT om.role FROM org_members om JOIN organizations o ON o.id = om.org_id
-			WHERE o.name = ? AND om.user_id = u.id)
+			WHERE o.name = ? AND om.user_id = u.id AND om.accepted_at IS NOT NULL)
 		FROM users u WHERE u.username = ?`, org, username).Scan(&userID, &orgRole)
 	if errors.Is(err, sql.ErrNoRows) {
 		return reject(http.StatusNotFound, "unknown_user", "There's no user @%s.", username)

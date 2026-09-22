@@ -96,7 +96,7 @@
             <dt>Organization</dt><dd><a href="/{{.Namespace}}">{{with .Org.DisplayName}}{{.}}{{else}}@{{$.Data.Namespace}}{{end}}</a></dd>
             {{end}}
             {{if .Collaborators}}
-            <dt>Owners</dt><dd>{{range $i, $c := .Collaborators}}{{if eq $c.Role "owner"}}{{if $i}} {{end}}<a href="/{{$c.Username}}">@{{$c.Username}}</a>{{end}}{{end}}</dd>
+            <dt>Owners</dt><dd>{{range $i, $c := .Collaborators}}{{if and (eq $c.Role "owner") (not $c.Pending)}}{{if $i}} {{end}}<a href="/{{$c.Username}}">@{{$c.Username}}</a>{{end}}{{end}}</dd>
             {{else if not .Org}}
             <dt>Owner</dt><dd><a href="/{{.Namespace}}">@{{.Namespace}}</a></dd>
             {{end}}
@@ -458,7 +458,7 @@
             <ul class="collab-list">
               {{range .Collaborators}}
               <li>
-                <span><a href="/{{.Username}}">@{{.Username}}</a> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span></span>
+                <span><a href="/{{.Username}}">@{{.Username}}</a> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span>{{if .Pending}} <span class="pill p-pre">invited</span>{{end}}</span>
                 <form class="inline-form" action="/-/collaborators/remove" method="post">
                   <input type="hidden" name="module" value="{{$.Data.Path}}"><input type="hidden" name="username" value="{{.Username}}">
                   <button class="btn btn-link" type="submit" aria-label="Remove @{{.Username}}">Remove</button>
@@ -475,7 +475,11 @@
               <select id="collab-role" name="role"><option value="maintainer">Maintainer</option><option value="owner">Owner</option></select>
               <button class="btn btn-primary btn-sm" type="submit">Add or update</button>
             </form>
-            <p class="muted small">To hand this module to someone else, add them as an owner, then remove yourself. The module path stays <code>{{.Path}}</code>, because every program that imports it depends on that path.</p>
+            <form class="inline-form leave-form" action="/-/collaborators/leave" method="post">
+              <input type="hidden" name="module" value="{{.Path}}">
+              <button class="btn btn-link" type="submit">Give up your role on this module</button>
+            </form>
+            <p class="muted small">To hand this module to someone else, add them as an owner. Once they accept, remove yourself. The module path stays <code>{{.Path}}</code>, because every program that imports it depends on that path.</p>
           </section>
 
           {{if .TrustedPublishing}}

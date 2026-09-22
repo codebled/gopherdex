@@ -697,3 +697,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .passkey-add { display: grid; gap: 10px; justify-items: start; width: 100%; max-width: 420px; }
 .passkey-add .field { width: 100%; }
 .passkeys-panel .publisher-list input[type="password"] { width: 120px; }
+.pending-email { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.pending-email p, .pending-email form { margin: 0; }
+.invitations-panel { grid-column: 1 / -1; }
+.invite-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.orgs-panel .module-list li { grid-template-columns: 1fr auto; align-items: center; }

@@ -55,8 +55,9 @@ func (r *Registry) Role(ctx context.Context, u *accounts.User, modPath string) (
 	var moduleRole, orgRole, memberAccess sql.NullString
 	var teamRole sql.NullInt64
 	err := r.DB.QueryRowContext(ctx, `SELECT
-			(SELECT mr.role FROM module_roles mr WHERE mr.module_id = m.id AND mr.user_id = ?),
-			(SELECT om.role FROM organizations o JOIN org_members om ON om.org_id = o.id WHERE o.name = m.namespace AND om.user_id = ?),
+			(SELECT mr.role FROM module_roles mr WHERE mr.module_id = m.id AND mr.user_id = ? AND mr.accepted_at IS NOT NULL),
+			(SELECT om.role FROM organizations o JOIN org_members om ON om.org_id = o.id
+				WHERE o.name = m.namespace AND om.user_id = ? AND om.accepted_at IS NOT NULL),
 			(SELECT o.member_access FROM organizations o WHERE o.name = m.namespace),
 			(SELECT MAX(CASE tm.role WHEN 'owner' THEN 2 ELSE 1 END) FROM team_modules tm
 				JOIN team_members tu ON tu.team_id = tm.team_id WHERE tm.module_id = m.id AND tu.user_id = ?)
@@ -94,6 +95,19 @@ func (r *Registry) canPublish(ctx context.Context, u *accounts.User, modPath, na
 			"@%s can't publish %s. Ask one of its owners to add you as a maintainer.", u.Username, modPath)
 	case !errors.Is(err, module.ErrNotFound):
 		return err
+	}
+	// A new major version (…/v2) of an existing module shows on that
+	// module's page, so it needs the same rights as a release of it.
+	if others, err := r.MajorVersions(ctx, modPath); err != nil {
+		return err
+	} else if len(others) > 0 {
+		for _, other := range others {
+			if role, err := r.Role(ctx, u, other); err == nil && role >= RoleMaintainer {
+				return nil
+			}
+		}
+		return reject(http.StatusForbidden, "forbidden_module",
+			"@%s can't publish %s: it's a new major version of %s. Ask one of its owners to add you as a maintainer.", u.Username, modPath, others[0])
 	}
 	if namespace == u.Username {
 		return nil
@@ -238,13 +252,14 @@ type Collaborator struct {
 	Username string
 	Role     string
 	Since    time.Time
+	Pending  bool // invited, not yet accepted: no access until then
 }
 
 // Collaborators lists a module's owners and maintainers, owners first.
 func (r *Registry) Collaborators(ctx context.Context, modPath string) ([]Collaborator, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT u.username, mr.role, mr.created_at FROM module_roles mr
+	rows, err := r.DB.QueryContext(ctx, `SELECT u.username, mr.role, mr.created_at, mr.accepted_at IS NULL FROM module_roles mr
 		JOIN modules m ON m.id = mr.module_id JOIN users u ON u.id = mr.user_id
-		WHERE m.path = ? ORDER BY mr.role = 'owner' DESC, u.username`, modPath)
+		WHERE m.path = ? ORDER BY mr.accepted_at IS NULL, mr.role = 'owner' DESC, u.username`, modPath)
 	if err != nil {
 		return nil, fmt.Errorf("list collaborators of %s: %w", modPath, err)
 	}
@@ -253,7 +268,7 @@ func (r *Registry) Collaborators(ctx context.Context, modPath string) ([]Collabo
 	for rows.Next() {
 		var c Collaborator
 		var since int64
-		if err := rows.Scan(&c.Username, &c.Role, &since); err != nil {
+		if err := rows.Scan(&c.Username, &c.Role, &since, &c.Pending); err != nil {
 			return nil, err
 		}
 		c.Since = time.Unix(since, 0).UTC()
@@ -288,7 +303,9 @@ func (r *Registry) SetCollaborator(ctx context.Context, u *accounts.User, modPat
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO module_roles (module_id, user_id, role, created_by, created_at) VALUES (?, ?, ?, ?, ?)
+	// A new role is an invitation until they accept it; changing an
+	// accepted role keeps it accepted.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO module_roles (module_id, user_id, role, created_by, created_at, accepted_at) VALUES (?, ?, ?, ?, ?, NULL)
 		ON CONFLICT (module_id, user_id) DO UPDATE SET role = excluded.role`, moduleID, userID, role.String(), u.ID, r.now().Unix()); err != nil {
 		return fmt.Errorf("set role on %s: %w", modPath, err)
 	}
@@ -335,7 +352,7 @@ func (r *Registry) RemoveCollaborator(ctx context.Context, u *accounts.User, mod
 func (r *Registry) keepAnOwner(ctx context.Context, tx *sql.Tx, moduleID int64, modPath string) error {
 	var owners, isOrg int
 	err := tx.QueryRowContext(ctx, `SELECT
-			(SELECT COUNT(*) FROM module_roles WHERE module_id = ? AND role = 'owner'),
+			(SELECT COUNT(*) FROM module_roles WHERE module_id = ? AND role = 'owner' AND accepted_at IS NOT NULL),
 			(SELECT COUNT(*) FROM organizations o JOIN modules m ON m.namespace = o.name WHERE m.id = ?)`,
 		moduleID, moduleID).Scan(&owners, &isOrg)
 	if err != nil {
@@ -350,9 +367,9 @@ func (r *Registry) keepAnOwner(ctx context.Context, tx *sql.Tx, moduleID int64, 
 // Managed lists the modules u maintains, with their role, sorted by path.
 func (r *Registry) Managed(ctx context.Context, u *accounts.User) ([]ModuleSummary, error) {
 	rows, err := r.DB.QueryContext(ctx, `SELECT DISTINCT m.namespace FROM modules m
-		LEFT JOIN module_roles mr ON mr.module_id = m.id AND mr.user_id = ?
+		LEFT JOIN module_roles mr ON mr.module_id = m.id AND mr.user_id = ? AND mr.accepted_at IS NOT NULL
 		LEFT JOIN organizations o ON o.name = m.namespace
-		LEFT JOIN org_members om ON om.org_id = o.id AND om.user_id = ?
+		LEFT JOIN org_members om ON om.org_id = o.id AND om.user_id = ? AND om.accepted_at IS NOT NULL
 		WHERE mr.user_id IS NOT NULL OR om.user_id IS NOT NULL`, u.ID, u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("list managed modules: %w", err)

@@ -105,7 +105,7 @@ func TestAccountFlow(t *testing.T) {
 	}
 
 	// Tokens are refused until the email is verified.
-	resp, body = b.post("/account/tokens", url.Values{"name": {"laptop"}, "expires": {"90"}})
+	resp, body = b.post("/account/tokens", url.Values{"name": {"laptop"}, "expires": {"90"}, "password": {"correct horse battery"}})
 	expect(t, resp, body, http.StatusForbidden, "Verify your email")
 
 	link := regexp.MustCompile(`http://gopherdex\.test(/verify-email\?token=\S+)`).FindStringSubmatch(mails.last(t).Body)
@@ -117,7 +117,10 @@ func TestAccountFlow(t *testing.T) {
 	resp, body = b.get("/account?done=email-verified")
 	expect(t, resp, body, http.StatusOK, "Your email is verified")
 
+	// A stolen session can't mint a token: the password is needed.
 	resp, body = b.post("/account/tokens", url.Values{"name": {"laptop"}, "expires": {"90"}})
+	expect(t, resp, body, http.StatusUnprocessableEntity, "Enter your current password")
+	resp, body = b.post("/account/tokens", url.Values{"name": {"laptop"}, "expires": {"90"}, "password": {"correct horse battery"}})
 	expect(t, resp, body, http.StatusCreated, "Copy it now")
 	secret := regexp.MustCompile(`gdx_[A-Za-z0-9_-]{43}`).FindString(body)
 	if secret == "" {
@@ -186,4 +189,29 @@ func TestLoginRateLimit(t *testing.T) {
 		resp, body = b.post("/login", url.Values{"login": {"nobody"}, "password": {"guess guess guess"}})
 	}
 	expect(t, resp, body, http.StatusTooManyRequests, "too many sign-in attempts")
+}
+
+func TestSafeNextAndIPKey(t *testing.T) {
+	for next, want := range map[string]string{
+		"/alice/retry?tab=docs": "/alice/retry?tab=docs",
+		"/\t/evil.example":      "/account",
+		"/\n/evil.example":      "/account",
+		"/\\evil.example":       "/account",
+		"/%5Cevil.example":      "/%5Cevil.example", // a path, not a host
+		"//evil.example":        "/account",
+		"https://evil.example":  "/account",
+		"/%2F/evil.example":     "/account",
+		"javascript:alert(1)":   "/account",
+		"":                      "/account",
+	} {
+		if got := safeNext(next); got != want {
+			t.Errorf("safeNext(%q) = %q, want %q", next, got, want)
+		}
+	}
+	if ipKey("2001:db8:1:2:aaaa::1") != ipKey("2001:db8:1:2:bbbb::9") {
+		t.Error("addresses in one IPv6 /64 should share a key")
+	}
+	if ipKey("2001:db8:1:2::1") == ipKey("2001:db8:1:3::1") || ipKey("192.0.2.1") == ipKey("192.0.2.2") {
+		t.Error("different clients share a key")
+	}
 }

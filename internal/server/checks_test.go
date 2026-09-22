@@ -54,7 +54,7 @@ func TestPublishChecksOverHTTP(t *testing.T) {
 	env.publish(t, mod, "v1.0.0")
 	alice := newBrowser(t, env.srv.URL)
 	alice.post("/login", url.Values{"login": {"alice"}, "password": {"correct horse battery"}})
-	_, body := alice.post("/account/tokens", url.Values{"name": {"ci"}, "expires": {"30"}})
+	_, body := alice.post("/account/tokens", url.Values{"name": {"ci"}, "expires": {"30"}, "password": {"correct horse battery"}})
 	token := strings.Split(strings.Split(body, `data-copy="gdx_`)[1], `"`)[0]
 	token = "gdx_" + token
 

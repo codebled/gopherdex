@@ -261,7 +261,7 @@ func run() error {
 		hosted = append(hosted, st)
 	}
 
-	disc := &discovery.Service{Local: hosted, ProxyPrefix: "/api/proxy", DocsBase: *pkgsite, Log: log}
+	disc := &discovery.Service{Local: hosted, ProxyPrefix: "/api/proxy", DocsBase: *pkgsite, Log: log, ModuleHost: *moduleHost}
 	if !*offline {
 		hc := &http.Client{Timeout: 15 * time.Second}
 		disc.Public = goproxy.NewClient(*upstream, hc)
@@ -322,6 +322,14 @@ func run() error {
 
 	for _, w := range launchWarnings(site, *smtpAddr, *admins, *backupDir, *trustProxy, *addr) {
 		log.Warn(w)
+	}
+	// An admin name nobody has registered can be claimed by whoever signs
+	// up first, and would then review reports and quarantine modules.
+	for _, name := range splitList(*admins) {
+		var exists bool
+		if err := db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE username = ?)`, name).Scan(&exists); err == nil && !exists {
+			log.Warn("an -admins account doesn't exist yet: register it now, or anyone who signs up with that name becomes an admin", "username", name)
+		}
 	}
 
 	if *debugAddr != "" {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -128,5 +129,42 @@ func TestS3Store(t *testing.T) {
 	copied, skipped, err := Copy(ctx, s, fs, 10)
 	if err != nil || copied != 1 || skipped != 1 {
 		t.Errorf("copy: copied %d skipped %d, %v", copied, skipped, err)
+	}
+}
+
+func TestS3OpenIsBounded(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "zip bytes")
+	}))
+	defer srv.Close()
+	s := &S3{Endpoint: srv.URL, Region: "us-east-1", Bucket: "b", PathStyle: true, AccessKey: "a", SecretKey: "s", HTTP: srv.Client()}
+	ctx := context.Background()
+	var open []Reader
+	for range maxOpenBlobs {
+		r, err := s.Open(ctx, "modules/x.zip")
+		if err != nil {
+			t.Fatal(err)
+		}
+		open = append(open, r)
+	}
+	// Every slot is held: the next download waits instead of piling up.
+	short, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	if _, err := s.Open(short, "modules/x.zip"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("open beyond the bound: %v", err)
+	}
+	open[0].Close()
+	open[0].Close() // closing twice gives back one slot, not two
+	r, err := s.Open(ctx, "modules/x.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := io.ReadAll(r); string(b) != "zip bytes" {
+		t.Errorf("read %q", b)
+	}
+	short2, cancel2 := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel2()
+	if _, err := s.Open(short2, "modules/x.zip"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("a double close released two slots: %v", err)
 	}
 }

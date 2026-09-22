@@ -29,6 +29,7 @@ type OrgMember struct {
 	Username string
 	Role     string // "owner" or "member"
 	Since    time.Time
+	Pending  bool // invited, not yet accepted: no access until then
 }
 
 // Membership is one organization a user belongs to.
@@ -72,7 +73,7 @@ func (r *Registry) CreateOrg(ctx context.Context, u *accounts.User, name, displa
 		return fmt.Errorf("create organization %s: %w", name, err)
 	}
 	orgID, _ := res.LastInsertId()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`, orgID, u.ID, now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO org_members (org_id, user_id, role, created_at, accepted_at) VALUES (?, ?, 'owner', ?, ?)`, orgID, u.ID, now, now); err != nil {
 		return fmt.Errorf("create organization %s: %w", name, err)
 	}
 	if err := r.audit(ctx, tx, u.ID, "org.created", name, c); err != nil {
@@ -98,9 +99,9 @@ func (r *Registry) OrgByName(ctx context.Context, name string) (*Org, bool, erro
 
 // OrgMembers lists an organization's members, owners first.
 func (r *Registry) OrgMembers(ctx context.Context, org string) ([]OrgMember, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT u.username, om.role, om.created_at FROM org_members om
+	rows, err := r.DB.QueryContext(ctx, `SELECT u.username, om.role, om.created_at, om.accepted_at IS NULL FROM org_members om
 		JOIN organizations o ON o.id = om.org_id JOIN users u ON u.id = om.user_id
-		WHERE o.name = ? ORDER BY om.role = 'owner' DESC, u.username`, org)
+		WHERE o.name = ? ORDER BY om.accepted_at IS NULL, om.role = 'owner' DESC, u.username`, org)
 	if err != nil {
 		return nil, fmt.Errorf("list members of %s: %w", org, err)
 	}
@@ -109,7 +110,7 @@ func (r *Registry) OrgMembers(ctx context.Context, org string) ([]OrgMember, err
 	for rows.Next() {
 		var m OrgMember
 		var since int64
-		if err := rows.Scan(&m.Username, &m.Role, &since); err != nil {
+		if err := rows.Scan(&m.Username, &m.Role, &since, &m.Pending); err != nil {
 			return nil, err
 		}
 		m.Since = time.Unix(since, 0).UTC()
@@ -121,7 +122,7 @@ func (r *Registry) OrgMembers(ctx context.Context, org string) ([]OrgMember, err
 // Memberships lists the organizations a user belongs to.
 func (r *Registry) Memberships(ctx context.Context, userID int64) ([]Membership, error) {
 	rows, err := r.DB.QueryContext(ctx, `SELECT o.name, om.role FROM org_members om JOIN organizations o ON o.id = om.org_id
-		WHERE om.user_id = ? ORDER BY o.name`, userID)
+		WHERE om.user_id = ? AND om.accepted_at IS NOT NULL ORDER BY o.name`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list memberships: %w", err)
 	}
@@ -141,7 +142,7 @@ func (r *Registry) Memberships(ctx context.Context, userID int64) ([]Membership,
 func (r *Registry) orgMember(ctx context.Context, ns string, userID int64) (string, error) {
 	var role string
 	err := r.DB.QueryRowContext(ctx, `SELECT om.role FROM org_members om JOIN organizations o ON o.id = om.org_id
-		WHERE o.name = ? AND om.user_id = ?`, ns, userID).Scan(&role)
+		WHERE o.name = ? AND om.user_id = ? AND om.accepted_at IS NOT NULL`, ns, userID).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
@@ -184,8 +185,10 @@ func (r *Registry) SetOrgMember(ctx context.Context, u *accounts.User, org, user
 		return err
 	}
 	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO org_members (org_id, user_id, role, created_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT (org_id, user_id) DO UPDATE SET role = excluded.role`, orgID, userID, role, r.now().Unix()); err != nil {
+	// A new member is invited until they accept; changing an accepted
+	// member's role keeps it accepted.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO org_members (org_id, user_id, role, created_at, accepted_at, invited_by) VALUES (?, ?, ?, ?, NULL, ?)
+		ON CONFLICT (org_id, user_id) DO UPDATE SET role = excluded.role`, orgID, userID, role, r.now().Unix(), u.ID); err != nil {
 		return fmt.Errorf("add @%s to %s: %w", username, org, err)
 	}
 	if err := keepAnOrgOwner(ctx, tx, orgID, org); err != nil {
@@ -228,7 +231,7 @@ func (r *Registry) RemoveOrgMember(ctx context.Context, u *accounts.User, org, u
 func (r *Registry) requireOrgOwner(ctx context.Context, u *accounts.User, org string) (int64, error) {
 	var orgID int64
 	var role sql.NullString
-	err := r.DB.QueryRowContext(ctx, `SELECT o.id, (SELECT role FROM org_members WHERE org_id = o.id AND user_id = ?)
+	err := r.DB.QueryRowContext(ctx, `SELECT o.id, (SELECT role FROM org_members WHERE org_id = o.id AND user_id = ? AND accepted_at IS NOT NULL)
 		FROM organizations o WHERE o.name = ?`, u.ID, org).Scan(&orgID, &role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, reject(http.StatusNotFound, "unknown_org", "There's no organization %s.", org)
@@ -244,7 +247,7 @@ func (r *Registry) requireOrgOwner(ctx context.Context, u *accounts.User, org st
 
 func keepAnOrgOwner(ctx context.Context, tx *sql.Tx, orgID int64, org string) error {
 	var owners int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM org_members WHERE org_id = ? AND role = 'owner'`, orgID).Scan(&owners); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM org_members WHERE org_id = ? AND role = 'owner' AND accepted_at IS NOT NULL`, orgID).Scan(&owners); err != nil {
 		return err
 	}
 	if owners == 0 {

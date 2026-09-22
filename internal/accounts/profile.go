@@ -179,8 +179,8 @@ func (s *Service) DeleteAccount(ctx context.Context, u *User, password, code str
 		}
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT o.name FROM organizations o JOIN org_members m ON m.org_id = o.id
-		WHERE m.user_id = ? AND m.role = 'owner'
-		  AND (SELECT COUNT(*) FROM org_members WHERE org_id = o.id AND role = 'owner') = 1
+		WHERE m.user_id = ? AND m.role = 'owner' AND m.accepted_at IS NOT NULL
+		  AND (SELECT COUNT(*) FROM org_members WHERE org_id = o.id AND role = 'owner' AND accepted_at IS NOT NULL) = 1
 		ORDER BY o.name`, u.ID)
 	if err != nil {
 		return fmt.Errorf("delete account: %w", err)

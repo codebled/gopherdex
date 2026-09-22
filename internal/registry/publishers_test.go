@@ -188,7 +188,7 @@ func TestPublisherPermissions(t *testing.T) {
 		t.Errorf("stranger on new module in alice's namespace: %v", err)
 	}
 	// Maintainers publish but don't manage publishers.
-	if err := f.reg.SetCollaborator(ctx, f.alice, mod, "bob", "maintainer", client); err != nil {
+	if err := f.setCollaborator(ctx, f.alice, mod, "bob", "maintainer", client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.reg.AddPublisher(ctx, bob, mod, "bob/retry", "release.yml", "", client); !isReject(err, http.StatusForbidden, "forbidden") {
@@ -207,7 +207,7 @@ func TestPublisherPermissions(t *testing.T) {
 
 	// A publisher set up by bob stops working once bob loses access, and
 	// the server can say why before any upload.
-	if err := f.reg.SetCollaborator(ctx, f.alice, mod, "bob", "owner", client); err != nil {
+	if err := f.setCollaborator(ctx, f.alice, mod, "bob", "owner", client); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.reg.AddPublisher(ctx, bob, mod, "bob/retry", "release.yml", "", client); err != nil {

@@ -290,8 +290,9 @@ Owners and maintainers see a **Manage** tab on the project page.
 |---|---|---|
 | **Yank / restore a release** | owners, maintainers | Hides the version from `@v/list` and `@latest`, so new installs skip it. Its `.info`, `.mod` and `.zip` stay downloadable, so builds that already use it keep working, as on PyPI. Also available as `gopherdex yank MODULE@VERSION --reason "…"` and `gopherdex unyank MODULE@VERSION` |
 | **Deprecate** | owners | Shows a notice, and optionally a replacement module, on the project page. The go command only reports `// Deprecated:` comments in go.mod, so add one to your next release too |
-| **Co-owners** | owners | Give another user the *owner* role (everything) or the *maintainer* role (publish and yank) |
-| **Transfer** | owners | Add the new owner, then remove yourself. A module always keeps at least one owner |
+| **Co-owners** | owners | Invite another user as *owner* (everything) or *maintainer* (publish and yank). It's an invitation: they get no access, and don't count as an owner, until they accept it on their account page |
+| **Transfer** | owners | Invite the new owner; once they accept, remove yourself. A module always keeps at least one owner who has accepted |
+| **Give up a role** | owners, maintainers | "Give up your role on this module" on the Manage tab, unless you're its last owner |
 
 A module path never changes, because every program that imports it depends on it. Moving a module to a new path means publishing it there and deprecating the old one with the new path as its replacement.
 
@@ -305,6 +306,10 @@ Create one on your account page. It gets its own namespace, for example `gopherd
 |---|---|
 | **Owner** | Manage members and teams, and act as owner of every module in the namespace |
 | **Member** | Publish new modules under the namespace, and publish and yank existing ones (or, with access **only through teams**, the ones their teams cover) |
+
+Adding a member is an invitation, as with module roles. Until it's accepted the person has no access, doesn't count as an owner, and can't be put on a team. Anyone can leave an organization from their account page, except its last owner.
+
+Removing a member removes all their access to the organization's modules: teams, and direct roles they got by creating a module or through a team. People added to a single module without being members are outside collaborators, and keep that role.
 
 Organizations and users share one namespace list, so a name can't be both.
 
@@ -338,6 +343,51 @@ A team is a group of an organization's members with a role on chosen modules: fo
 | **Trusted publishing** | GitHub Actions publishes without stored tokens; each release records the verified run. See **Trusted publishing** above. |
 | **Publish checks** | Every upload is scanned before it's stored (`internal/scan`). Compiled programs (ELF, Mach-O, PE) outside `testdata/` are refused. Warned and sent to the admin queue as an automated report: code that runs as soon as the package is imported (an `init()` or package-level variable calling `os/exec`, `net/http`, `net.Dial`, `plugin.Open`, `syscall.Exec`… found through import aliases), string literals of 16 KB or more that look like base64 or hex, WebAssembly and `testdata` binaries, and a new module whose `owner/name` is one typo from a popular module here or a well-known GitHub module, or copies one outright. The CLI prints the warnings, maintainers see them on the Manage tab, and maintainers and admins are emailed. |
 | **Rate limits** | Sign-in (including 2FA codes), sign-up, password resets, verification emails, uploads, reports, search pages and the JSON API are all limited. The GOPROXY endpoints aren't, because the go command and the public mirror fetch many files at once. |
+
+## Security review
+
+Before launch, every part of the code that handles untrusted input or decides who may do what was audited. There were four reviews:
+- accounts and sign-in;
+- uploads, storage and the proxy;
+- rendering and browser headers;
+- authorization.
+
+Each finding was confirmed in the code, then fixed with a test.
+
+**Dependencies.** `govulncheck` found nine vulnerabilities reachable from our code, all in Go 1.26.4's standard library (TLS, HTTP, `html/template`, `os.Root` and others). `go.mod` now pins `toolchain go1.26.6` and the Docker build uses `golang:1.26.6`, and the scan is clean. It still reports `golang.org/x/crypto/openpgp` as unmaintained, but that package isn't imported.
+
+| Area | Finding | Fix |
+|---|---|---|
+| Accounts | A pending email change survived a password reset, so an attacker could take the account back | Resetting the password or signing out other sessions cancels it; the account page can cancel it too |
+| Accounts | Two-factor codes: parallel guesses all saw the same attempt count, and the only other limit was per IP | Attempts are counted before the code is checked. After 10 wrong codes in an hour, code sign-ins pause for the account (passkeys still work) and the owner is emailed |
+| Accounts | Open redirect after sign-in: `next=/%09/evil.example` | `next` is parsed strictly: no control characters, backslashes, scheme or host |
+| Accounts | A stolen session could add lasting access (an API token, an authenticator app, a passkey) that a password reset didn't remove | These need the current password. Guesses are limited per account |
+| Accounts | The reset form's timing revealed whether an email had an account | The email is sent in the background |
+| Accounts | Rate limits: once 10,000 keys were tracked, every request walked the whole map; an IPv6 /64 counted as many clients; password and passkey sign-ins had separate budgets | Sweeps at most once a second, a 200,000-key cap, IPv6 grouped by /64, one sign-in budget, and per-account limits on turning off 2FA and changing the password |
+| Uploads | One upload of 500 × 1 MB Go files used about 18 GB while docs were generated | Docs parse at most 2 MB of source per directory and 32 MB per module; the rest are marked partial |
+| Uploads | An anonymous `/api/search` read every hosted module and its docs | It uses the full-text index. The docs cache keeps the 256 most recently used entries |
+| Uploads | A HEAD request for a zip never closed the stored file (with S3, a temporary file) | Closed |
+| Uploads | S3 kept each download in memory (up to 16 MB), with no limit on how many at once | At most 16 downloads are held at a time |
+| Uploads | Compiled code could hide in `.syso`/`.o` files (the go command links `.syso` into builds) or in Go files too big to scan | Both are published but flagged for review |
+| Uploads | The upstream proxy cache was bounded by entries, not bytes; go.mod could be 16 MB | 64 MB cache, 1 MB per entry; uploaded go.mod at most 1 MB |
+| Authorization | Anyone could be made an owner of an organization or module without agreeing, then left as its sole owner | Roles are invitations until accepted; people can leave |
+| Authorization | Members removed from an organization kept direct roles on its modules | Removing a member removes those roles |
+| Authorization | A member with no access to `acme/api` could publish `acme/api/v2`, which showed on its page | A new major version needs maintainer rights on the module it continues |
+| Authorization | `/api/modules` served a quarantined module from the public mirror's cache | Paths under the registry's own host never fall back to the public mirror |
+| Authorization | An `-admins` name nobody had registered could be claimed | The server warns about it at startup |
+| Authorization | `advisories`, `feeds`, `vulndb` and `badge` could be registered as names, hiding those users' pages behind site routes | Reserved |
+| Authorization | Quarantined major versions were still linked; an upload racing a quarantine could land | Hidden from links; quarantine is re-checked inside the publish transaction |
+
+**Checked and found sound** (among others):
+- Secrets are 32 random bytes, stored only as SHA-256.
+- Passwords use argon2id, with constant-time comparison and a dummy hash for unknown users.
+- TOTP codes can't be reused.
+- Passkeys are bound to this site's origin, a ceremony works once, and a clone warning refuses the sign-in.
+- CSRF protection covers every POST; the one state-changing GET needs a token.
+- OIDC checks are complete: algorithm, issuer, audience, time, token reuse and repository owner ID.
+- Uploads and zips have strict size, name and path checks, blobs are written only once, and no user input can make the server fetch an arbitrary address.
+- Markdown renders without raw HTML, and every link and URL is filtered.
+- The CSP has no `unsafe-inline`; frames are denied and content types aren't sniffed.
 
 ## Backups
 
@@ -437,8 +487,11 @@ The after-fixes run is its first 8 minutes: then the laptop running it went to s
 | `GET /account` | Email status and API tokens |
 | `POST /account/email` | Change email: needs the current password; the address changes only when the link sent to the new one is opened, and the old address is told |
 | `POST /account/preferences` | Optional emails: new versions of your modules, and being given access to a module or organization. Security emails can't be turned off |
+| `POST /account/email/cancel` | Cancel a pending email change |
+| `POST /account/invitations/{accept,decline}` | Answer an invitation to an organization or module (`kind`, `name`) |
+| `POST /-/orgs/leave`, `POST /-/collaborators/leave` | Leave an organization, or give up your role on a module |
 | `POST /account/delete` | Delete the account (password, 2FA code if on, and the username typed to confirm). Refused while you're an organization's only owner |
-| `POST /account/tokens`, `POST /account/tokens/{id}/revoke` | Create or revoke a token (requires a verified email) |
+| `POST /account/tokens`, `POST /account/tokens/{id}/revoke` | Create or revoke a token (creating needs a verified email and your current password) |
 | `GET /api/whoami` | `Authorization: Bearer gdx_…` returns the token's user, namespaces (own and organizations') and scope |
 | `POST /api/yank` | Bearer token; JSON `{"module", "version", "reason", "yank": true\|false}` |
 | `POST /-/yank`, `/-/unyank`, `/-/deprecate`, `/-/undeprecate`, `/-/collaborators[/remove]`, `/-/orgs`, `/-/orgs/members[/remove]`, `/-/orgs/access` | Website forms behind the Manage tab, the account page and organization pages |

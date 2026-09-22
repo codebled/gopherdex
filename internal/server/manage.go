@@ -94,8 +94,7 @@ func (s *server) handleSetCollaborator(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if target != u.Username {
-			s.emailUser(target, accounts.EmailAccess, "You're now "+article(role)+" "+role+" of "+modPath,
-				fmt.Sprintf("@%s made you %s %s of %s on Gopherdex.\n\n%s%s", u.Username, article(role), role, modPath, s.siteURL, s.project.URL(modPath, "")))
+			s.notifyRole(r, target, registry.InviteModule, modPath, role, u.Username, s.project.URL(modPath, ""))
 		}
 		return nil
 	})
@@ -152,9 +151,7 @@ func (s *server) handleSetOrgMember(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if target != u.Username {
-			s.emailUser(target, accounts.EmailAccess, "You're now "+article(role)+" "+role+" of @"+org,
-				fmt.Sprintf("@%s made you %s %s of the organization @%s on Gopherdex. You can publish modules under %s/%s/.\n\n%s/%s",
-					u.Username, article(role), role, org, s.moduleHost, org, s.siteURL, org))
+			s.notifyRole(r, target, registry.InviteOrg, org, role, u.Username, "/"+org)
 		}
 		return nil
 	})
@@ -218,4 +215,79 @@ func (s *server) handleAPIYank(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.apiError(w, r, err)
 	}
+}
+
+// notifyRole emails someone given a role: an invitation to accept, or, for
+// someone who already accepted, the change.
+func (s *server) notifyRole(r *http.Request, target, kind, name, role, by, path string) {
+	what := name
+	if kind == registry.InviteOrg {
+		what = "the organization @" + name
+	}
+	pending, err := s.registry.InvitationPending(r.Context(), kind, name, target)
+	if err != nil {
+		s.log.Error("check invitation", "err", err)
+		return
+	}
+	if pending {
+		s.emailUser(target, accounts.EmailAccess, "@"+by+" invited you to "+name+" on Gopherdex",
+			fmt.Sprintf("@%s invited you to be %s %s of %s on Gopherdex. Nothing changes until you accept: accept or decline on your account page.\n\n%s/account",
+				by, article(role), role, what, s.siteURL))
+		return
+	}
+	s.emailUser(target, accounts.EmailAccess, "You're now "+article(role)+" "+role+" of "+name,
+		fmt.Sprintf("@%s made you %s %s of %s on Gopherdex.\n\n%s%s", by, article(role), role, what, s.siteURL, path))
+}
+
+// ---- Invitations and leaving ----
+
+func (s *server) handleInvitation(accept bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := s.requireUser(w, r)
+		if u == nil || !parseForm(w, r) {
+			return
+		}
+		kind, name := r.PostFormValue("kind"), r.PostFormValue("name")
+		if kind != registry.InviteOrg && kind != registry.InviteModule {
+			http.Error(w, "Unknown invitation.", http.StatusBadRequest)
+			return
+		}
+		act, done := s.registry.DeclineInvitation, "invite-declined"
+		if accept {
+			act, done = s.registry.AcceptInvitation, "invite-accepted"
+		}
+		err := act(r.Context(), u, kind, name, s.clientOf(r))
+		var re *registry.Error
+		switch {
+		case err == nil:
+			http.Redirect(w, r, "/account?done="+done, http.StatusSeeOther)
+		case errors.As(err, &re):
+			s.renderAccount(w, r, re.Status, accountData{Error: re.Message})
+		default:
+			s.serverError(w, r, err)
+		}
+	}
+}
+
+func (s *server) handleLeaveOrg(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil || !parseForm(w, r) {
+		return
+	}
+	err := s.registry.LeaveOrg(r.Context(), u, accounts.NormalizeUsername(r.PostFormValue("org")), s.clientOf(r))
+	var re *registry.Error
+	switch {
+	case err == nil:
+		http.Redirect(w, r, "/account?done=left", http.StatusSeeOther)
+	case errors.As(err, &re):
+		s.renderAccount(w, r, re.Status, accountData{Error: re.Message})
+	default:
+		s.serverError(w, r, err)
+	}
+}
+
+func (s *server) handleLeaveModule(w http.ResponseWriter, r *http.Request) {
+	s.maintainerAction(w, r, "role-removed", func(u *accounts.User, modPath string) error {
+		return s.registry.LeaveModule(r.Context(), u, modPath, s.clientOf(r))
+	})
 }

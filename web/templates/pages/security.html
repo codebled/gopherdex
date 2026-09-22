@@ -45,6 +45,8 @@
                 <label class="visually-hidden" for="confirm-code">Code from the app</label>
                 <input id="confirm-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" required
                   {{with .Errors.code}}aria-invalid="true"{{end}}>
+                <label class="visually-hidden" for="confirm-password">Your password</label>
+                <input id="confirm-password" name="password" type="password" autocomplete="current-password" placeholder="Your password" required>
                 <button class="btn btn-primary btn-sm" type="submit">Turn on</button>
               </form>
               {{with .Errors.code}}<p class="field-error">{{.}}</p>{{end}}
@@ -83,6 +85,10 @@
             <div class="field">
               <label for="passkey-name">Name this passkey</label>
               <input id="passkey-name" type="text" maxlength="60" placeholder="MacBook Touch ID, iPhone, YubiKey…" autocomplete="off">
+            </div>
+            <div class="field">
+              <label for="passkey-password">Your password</label>
+              <input id="passkey-password" type="password" autocomplete="current-password">
             </div>
             <button class="btn btn-primary btn-sm" type="button">Add a passkey</button>
           </div>

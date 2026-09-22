@@ -73,7 +73,7 @@ func newTestEnvWith(t *testing.T, configure func(*Config)) *testEnv {
 	rec := &mailRecorder{}
 	reg := &registry.Registry{DB: db, Blobs: blobs, ModuleHost: "gopherdex.test", MaxZipSize: 1 << 20, Log: log}
 	hosted := registry.Multi{reg, st}
-	disc := &discovery.Service{Local: hosted, ProxyPrefix: "/api/proxy", DocsBase: "https://pkg.go.dev", Log: log}
+	disc := &discovery.Service{Local: hosted, ProxyPrefix: "/api/proxy", DocsBase: "https://pkg.go.dev", Log: log, ModuleHost: "gopherdex.test"}
 	accts := &accounts.Service{DB: db, Mailer: rec, BaseURL: "http://gopherdex.test", Log: log}
 	downloads := &registry.Downloads{Registry: reg}
 	proxy := goproxy.NewHandler(hosted, log)
@@ -150,8 +150,8 @@ func TestRoutes(t *testing.T) {
 		{"/search", 200, "text/html; charset=utf-8", "No modules have been published yet."},
 		{"/search?q=anything&license=MIT", 200, "text/html; charset=utf-8", "with these filters"},
 		{"/search?page=2", 404, "text/html; charset=utf-8", ""},
-		{"/?q=retry", 200, "text/html; charset=utf-8", "retry"}, // old home-page searches redirect
-		{"/api/search?q=greetings", 200, "application/json", `"path":"example.com/hello"`},
+		{"/?q=retry", 200, "text/html; charset=utf-8", "retry"},            // old home-page searches redirect
+		{"/api/search?q=greetings", 200, "application/json", `"results":`}, // hosted results come from the index: see TestAPISearch
 		{"/api/search?q=nothing-matches-this", 200, "application/json", `"results":[]`},
 		{"/api/modules/example.com/hello", 200, "application/json", `"latest":"v1.1.0"`},
 		{"/api/modules/example.com/hello?version=v1.2.0-beta.1", 200, "application/json", `"importPath":"example.com/hello/wave"`},
@@ -240,5 +240,16 @@ func TestTokensETag(t *testing.T) {
 	resp, _ = fetch(t, srv, "/tokens.css", "If-None-Match", tag)
 	if resp.StatusCode != http.StatusNotModified {
 		t.Fatalf("conditional GET: status %d, want 304", resp.StatusCode)
+	}
+}
+
+func TestAPISearch(t *testing.T) {
+	env := newTestEnv(t)
+	env.publish(t, "gopherdex.test/alice/retry", "v1.0.0")
+	for _, q := range []string{"/api/search?q=retry", "/api/search?q=retry&scope=hosted"} {
+		resp, body := fetch(t, env.srv, q)
+		if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"path":"gopherdex.test/alice/retry"`) {
+			t.Errorf("%s: %d %s", q, resp.StatusCode, body)
+		}
 	}
 }

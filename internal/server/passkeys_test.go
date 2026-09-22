@@ -42,7 +42,11 @@ func TestPasskeysOverHTTP(t *testing.T) {
 	expect(t, resp, body, http.StatusOK, "data-passkey-register")
 
 	// Add a passkey.
-	resp, body = alice.postJSONAs("/account/passkeys/options", nil)
+	resp, body = alice.postJSONAs("/account/passkeys/options", []byte(`{"password":"wrong"}`))
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("options with a wrong password: %d %s", resp.StatusCode, body)
+	}
+	resp, body = alice.postJSONAs("/account/passkeys/options", []byte(`{"password":"correct horse battery"}`))
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("options: %d %s", resp.StatusCode, body)
 	}

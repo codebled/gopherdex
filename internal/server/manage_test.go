@@ -66,6 +66,13 @@ func TestManageFlows(t *testing.T) {
 
 	bob := newBrowser(t, env.srv.URL)
 	bob.post("/login", url.Values{"login": {"bob"}, "password": {"correct horse battery"}})
+	// Until bob accepts, the role gives him nothing.
+	resp, body = bob.get("/alice/retry?tab=manage")
+	expect(t, resp, body, http.StatusNotFound, "")
+	resp, body = bob.get("/account")
+	expect(t, resp, body, http.StatusOK, "invited you to be a <strong>maintainer</strong>")
+	resp, body = bob.post("/account/invitations/accept", url.Values{"kind": {"module"}, "name": {"gopherdex.test/alice/retry"}})
+	expect(t, resp, body, http.StatusSeeOther, "")
 	resp, body = bob.get("/alice/retry?tab=manage")
 	expect(t, resp, body, http.StatusOK, "a maintainer")
 	if strings.Contains(body, "Mark deprecated") || strings.Contains(body, "Add or update") {

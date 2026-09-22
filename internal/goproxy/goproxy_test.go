@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/parthiban-sivakumar/gopherdex/internal/module"
 	"github.com/parthiban-sivakumar/gopherdex/internal/store"
@@ -156,5 +158,51 @@ func TestClientAgainstHandler(t *testing.T) {
 	}
 	if _, err := c.GoMod(ctx, "example.com/missing", "v1.0.0"); !errors.Is(err, module.ErrNotFound) {
 		t.Fatalf("GoMod(missing) = %v, want ErrNotFound", err)
+	}
+}
+
+// closeTracker is a zip that records whether it was closed.
+type closeTracker struct{ closed bool }
+
+func (z *closeTracker) WriteTo(w io.Writer) (int64, error) { z.closed = true; return 0, nil }
+func (z *closeTracker) Close() error                       { z.closed = true; return nil }
+
+type zipSource struct {
+	Source
+	zip *closeTracker
+}
+
+func (s zipSource) Zip(context.Context, string, string) (io.WriterTo, error) { return s.zip, nil }
+
+func TestHeadZipClosesIt(t *testing.T) {
+	z := &closeTracker{}
+	h := NewHandler(zipSource{zip: z}, nil)
+	req := httptest.NewRequest(http.MethodHead, "/example.com/hello/@v/v1.0.0.zip", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || !z.closed {
+		t.Fatalf("HEAD: status %d, closed %v", rec.Code, z.closed)
+	}
+}
+
+func TestCacheBoundedByBytes(t *testing.T) {
+	c := &ttlCache{items: map[string]cacheItem{}, max: 100, maxBytes: 3 << 20}
+	c.put("huge", make([]byte, maxCachedBody+1), time.Hour)
+	if _, ok := c.get("huge"); ok {
+		t.Error("a body over the per-item limit was cached")
+	}
+	for i := range 5 {
+		c.put(fmt.Sprint(i), make([]byte, 1<<20), time.Hour)
+		if c.bytes > c.maxBytes {
+			t.Fatalf("cache holds %d bytes, limit %d", c.bytes, c.maxBytes)
+		}
+	}
+	c.put("0", make([]byte, 10), time.Hour) // replacing counts the new size only
+	total := 0
+	for _, it := range c.items {
+		total += len(it.body)
+	}
+	if total != c.bytes {
+		t.Errorf("tracked %d bytes, holds %d", c.bytes, total)
 	}
 }

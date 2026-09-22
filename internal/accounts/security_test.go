@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -133,14 +134,7 @@ func TestPasswordResetAndChange(t *testing.T) {
 	if err := s.RequestPasswordReset(ctx, "ALICE@example.com", client); err != nil {
 		t.Fatal(err)
 	}
-	var body string
-	rec.mu.Lock()
-	for _, m := range rec.sent {
-		if m.Subject == "Reset your Gopherdex password" {
-			body = m.Body
-		}
-	}
-	rec.mu.Unlock()
+	body := rec.waitForMail(t, "alice@example.com", "Reset your Gopherdex password") // sent in the background
 	i := strings.Index(body, "token=")
 	token := strings.Fields(body[i+len("token="):])[0]
 	if err := s.CheckResetToken(ctx, token); err != nil {
@@ -209,5 +203,86 @@ func TestModuleScopedToken(t *testing.T) {
 	}
 	if _, _, err := s.CreateToken(ctx, u, "bad", 0, "namespace:bob", client); err == nil {
 		t.Fatal("token for someone else's namespace accepted")
+	}
+}
+
+func TestSecurityHardening(t *testing.T) {
+	s, rec, c := newService(t)
+	ctx := context.Background()
+	u := verifiedUser(t, s, rec, "alice")
+
+	// A pending email change dies with a password reset, and can be cancelled.
+	if err := s.RequestEmailChange(ctx, u, "attacker@example.com", "correct horse battery", client); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RequestPasswordReset(ctx, "alice@example.com", client); err != nil {
+		t.Fatal(err)
+	}
+	body := rec.waitForMail(t, "alice@example.com", "Reset your Gopherdex password")
+	token := strings.Fields(body[strings.Index(body, "token=")+len("token="):])[0]
+	if _, err := s.ResetPassword(ctx, token, "a brand new passphrase", client); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.PendingEmail(ctx, u); p != "" {
+		t.Fatalf("email change to %s survived a password reset", p)
+	}
+	s.RequestEmailChange(ctx, u, "new@example.com", "a brand new passphrase", client)
+	if ok, err := s.CancelEmailChange(ctx, u, client); !ok || err != nil {
+		t.Fatalf("cancel: %v, %v", ok, err)
+	}
+	if p, _ := s.PendingEmail(ctx, u); p != "" {
+		t.Fatal("cancelled change still pending")
+	}
+
+	// ConfirmPassword guards sensitive changes.
+	if err := s.ConfirmPassword(ctx, u, "correct horse battery"); !errors.Is(err, ErrWrongPassword) {
+		t.Errorf("old password confirmed: %v", err)
+	}
+	if err := s.ConfirmPassword(ctx, u, "a brand new passphrase"); err != nil {
+		t.Errorf("current password: %v", err)
+	}
+
+	// Two-factor codes: parallel guesses against one sign-in get five tries.
+	if _, err := s.BeginTOTP(ctx, u); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ConfirmTOTP(ctx, u, codeAt(t, s, u.ID, c.t), client); err != nil {
+		t.Fatal(err)
+	}
+	failures := func() int {
+		var n int
+		s.DB.QueryRow(`SELECT COUNT(*) FROM audit_log WHERE user_id = ? AND detail = 'wrong 2FA code'`, u.ID).Scan(&n)
+		return n
+	}
+	res, _ := s.Login(ctx, "alice", "a brand new passphrase", client)
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Add(1)
+		go func() { defer wg.Done(); s.CompleteLogin(ctx, res.Challenge, "000000", client) }()
+	}
+	wg.Wait()
+	if n := failures(); n > maxCodeAttempts {
+		t.Fatalf("%d codes checked against one sign-in, want at most %d", n, maxCodeAttempts)
+	}
+	// Across sign-ins, the account pauses code sign-ins after ten wrong codes,
+	// even for the right code, and tells its owner.
+	for failures() < maxCodeFailures {
+		res, _ := s.Login(ctx, "alice", "a brand new passphrase", client)
+		for range maxCodeAttempts {
+			if _, _, err := s.CompleteLogin(ctx, res.Challenge, "000000", client); errors.Is(err, ErrTooManyAttempts) || failures() >= maxCodeFailures {
+				break
+			}
+		}
+	}
+	rec.waitForMail(t, "alice@example.com", "Repeated wrong sign-in codes")
+	c.t = c.t.Add(time.Minute)
+	res, _ = s.Login(ctx, "alice", "a brand new passphrase", client)
+	if _, _, err := s.CompleteLogin(ctx, res.Challenge, codeAt(t, s, u.ID, c.t), client); !errors.Is(err, ErrTooManyAttempts) {
+		t.Fatalf("right code during the pause: %v", err)
+	}
+	c.t = c.t.Add(codeFailureWindow + time.Minute)
+	res, _ = s.Login(ctx, "alice", "a brand new passphrase", client)
+	if _, _, err := s.CompleteLogin(ctx, res.Challenge, codeAt(t, s, u.ID, c.t), client); err != nil {
+		t.Fatalf("right code after the pause: %v", err)
 	}
 }

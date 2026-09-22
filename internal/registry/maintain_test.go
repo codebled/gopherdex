@@ -100,7 +100,7 @@ func TestCollaboratorsAndTransfer(t *testing.T) {
 	}
 	// …until alice makes him a maintainer. Maintainers publish and yank,
 	// but can't manage access or deprecate.
-	if err := f.reg.SetCollaborator(ctx, f.alice, mod, "@Bob", "maintainer", client); err != nil {
+	if err := f.setCollaborator(ctx, f.alice, mod, "@Bob", "maintainer", client); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.publishAs(t, bob, bobTok, mod, "v1.1.0"); err != nil {
@@ -112,7 +112,7 @@ func TestCollaboratorsAndTransfer(t *testing.T) {
 	if err := f.reg.Deprecate(ctx, bob, mod, "old", "", client); !isReject(err, http.StatusForbidden, "forbidden") {
 		t.Fatalf("maintainer deprecate: %v", err)
 	}
-	if err := f.reg.SetCollaborator(ctx, bob, mod, "bob", "owner", client); !isReject(err, http.StatusForbidden, "forbidden") {
+	if err := f.setCollaborator(ctx, bob, mod, "bob", "owner", client); !isReject(err, http.StatusForbidden, "forbidden") {
 		t.Fatalf("maintainer self-promotion: %v", err)
 	}
 
@@ -122,7 +122,7 @@ func TestCollaboratorsAndTransfer(t *testing.T) {
 	}
 
 	// Transfer: make bob an owner, then alice removes herself.
-	if err := f.reg.SetCollaborator(ctx, f.alice, mod, "bob", "owner", client); err != nil {
+	if err := f.setCollaborator(ctx, f.alice, mod, "bob", "owner", client); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.reg.RemoveCollaborator(ctx, f.alice, mod, "alice", client); err != nil {
@@ -138,7 +138,7 @@ func TestCollaboratorsAndTransfer(t *testing.T) {
 	if len(collabs) != 1 || collabs[0].Username != "bob" || collabs[0].Role != "owner" {
 		t.Fatalf("collaborators = %+v", collabs)
 	}
-	if err := f.reg.SetCollaborator(ctx, bob, mod, "nobody", "maintainer", client); !isReject(err, http.StatusNotFound, "unknown_user") {
+	if err := f.setCollaborator(ctx, bob, mod, "nobody", "maintainer", client); !isReject(err, http.StatusNotFound, "unknown_user") {
 		t.Fatalf("unknown user: %v", err)
 	}
 	managed, _ := f.reg.Managed(ctx, bob)
@@ -195,10 +195,10 @@ func TestOrganizations(t *testing.T) {
 	if err := f.publishAs(t, bob, bobTok, mod, "v1.0.0"); !isReject(err, http.StatusForbidden, "forbidden_namespace") {
 		t.Fatalf("non-member publish: %v", err)
 	}
-	if err := f.reg.SetOrgMember(ctx, bob, "acme", "carol", "member", client); !isReject(err, http.StatusForbidden, "forbidden") {
+	if err := f.setOrgMember(ctx, bob, "acme", "carol", "member", client); !isReject(err, http.StatusForbidden, "forbidden") {
 		t.Fatalf("non-owner adding members: %v", err)
 	}
-	if err := f.reg.SetOrgMember(ctx, f.alice, "acme", "bob", "member", client); err != nil {
+	if err := f.setOrgMember(ctx, f.alice, "acme", "bob", "member", client); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.publishAs(t, bob, bobTok, mod, "v1.0.0"); err != nil {

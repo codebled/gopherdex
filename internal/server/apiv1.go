@@ -226,7 +226,7 @@ func (s *server) handleV1Module(w http.ResponseWriter, r *http.Request) {
 		out.Organization = p.Namespace
 	}
 	for _, c := range p.Collaborators {
-		if c.Role == "owner" {
+		if c.Role == "owner" && !c.Pending {
 			out.Owners = append(out.Owners, c.Username)
 		}
 	}

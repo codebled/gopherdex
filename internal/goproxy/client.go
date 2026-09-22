@@ -40,7 +40,7 @@ func NewClient(base string, hc *http.Client) *Client {
 	return &Client{
 		base:  strings.TrimSuffix(base, "/"),
 		http:  hc,
-		cache: &ttlCache{items: map[string]cacheItem{}, max: 4096},
+		cache: &ttlCache{items: map[string]cacheItem{}, max: 4096, maxBytes: 64 << 20},
 	}
 }
 
@@ -154,10 +154,15 @@ func firstLine(b []byte) string {
 }
 
 type ttlCache struct {
-	mu    sync.Mutex
-	items map[string]cacheItem
-	max   int
+	mu       sync.Mutex
+	items    map[string]cacheItem
+	max      int // entries
+	maxBytes int // total body bytes: public go.mod files can be up to 16 MB each
+	bytes    int
 }
+
+// maxCachedBody is the largest response kept: anything bigger is refetched.
+const maxCachedBody = 1 << 20
 
 type cacheItem struct {
 	body    []byte
@@ -177,16 +182,26 @@ func (c *ttlCache) get(key string) ([]byte, bool) {
 func (c *ttlCache) put(key string, body []byte, ttl time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if len(body) > maxCachedBody {
+		return
+	}
 	now := time.Now()
-	if len(c.items) >= c.max {
+	if old, ok := c.items[key]; ok {
+		c.bytes -= len(old.body)
+		delete(c.items, key)
+	}
+	if len(c.items) >= c.max || (c.maxBytes > 0 && c.bytes+len(body) > c.maxBytes) {
 		for k, it := range c.items {
 			if now.After(it.expires) {
+				c.bytes -= len(it.body)
 				delete(c.items, k)
 			}
 		}
-		if len(c.items) >= c.max {
+		if len(c.items) >= c.max || (c.maxBytes > 0 && c.bytes+len(body) > c.maxBytes) {
 			clear(c.items)
+			c.bytes = 0
 		}
 	}
 	c.items[key] = cacheItem{body: body, expires: now.Add(ttl)}
+	c.bytes += len(body)
 }

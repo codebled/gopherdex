@@ -55,7 +55,7 @@ func (s *server) handleForgot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := s.clientOf(r)
-	if !s.resetLimit.Allow(c.IP) {
+	if !s.resetLimit.Allow(ipKey(c.IP)) {
 		s.tooManyRequests(w, r, "password reset")
 		return
 	}
@@ -107,7 +107,7 @@ func (s *server) handleReset(w http.ResponseWriter, r *http.Request) {
 	s.clearSession(w)
 	s.render(w, r, http.StatusOK, "message", "Password changed", messageData{
 		Kicker: "Password reset", Heading: "Your password is changed.",
-		Body:      "You've been signed out everywhere. Sign in with your new password.",
+		Body:      "You've been signed out everywhere, and any pending email change was cancelled. Sign in with your new password.",
 		ActionURL: "/login", ActionLabel: "Sign in",
 	})
 }
@@ -142,7 +142,7 @@ func (s *server) handleTwoFactor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := s.clientOf(r)
-	if !s.loginLimit.Allow(c.IP) {
+	if !s.loginLimit.Allow(ipKey(c.IP)) {
 		s.tooManyRequests(w, r, "sign-in")
 		return
 	}
@@ -254,6 +254,10 @@ func (s *server) handleConfirmTOTP(w http.ResponseWriter, r *http.Request) {
 	if u == nil || !parseForm(w, r) {
 		return
 	}
+	if msg := s.confirmPassword(r, u); msg != "" {
+		s.renderSecurity(w, r, http.StatusUnprocessableEntity, securityData{Errors: map[string]string{"code": msg}})
+		return
+	}
 	codes, err := s.accounts.ConfirmTOTP(r.Context(), u, r.PostFormValue("code"), s.clientOf(r))
 	switch {
 	case errors.Is(err, accounts.ErrBadSecondFactor):
@@ -272,6 +276,10 @@ func (s *server) handleDisableTOTP(w http.ResponseWriter, r *http.Request) {
 	if u == nil || !parseForm(w, r) {
 		return
 	}
+	if !s.loginLimit.Allow(sensitiveKey(u)) {
+		s.renderSecurity(w, r, http.StatusTooManyRequests, securityData{Errors: map[string]string{"disable": tooManyTries}})
+		return
+	}
 	switch err := s.accounts.DisableTOTP(r.Context(), u, r.PostFormValue("code"), s.clientOf(r)); {
 	case errors.Is(err, accounts.ErrBadSecondFactor):
 		s.renderSecurity(w, r, http.StatusUnprocessableEntity, securityData{Errors: map[string]string{"disable": "That code isn't right."}})
@@ -285,6 +293,10 @@ func (s *server) handleDisableTOTP(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	u := s.requireUser(w, r)
 	if u == nil || !parseForm(w, r) {
+		return
+	}
+	if !s.loginLimit.Allow(sensitiveKey(u)) {
+		s.renderSecurity(w, r, http.StatusTooManyRequests, securityData{Errors: map[string]string{"current_password": tooManyTries}})
 		return
 	}
 	err := s.accounts.ChangePassword(r.Context(), u, r.PostFormValue("current_password"), r.PostFormValue("new_password"), sessionSecret(r), s.clientOf(r))
@@ -556,4 +568,45 @@ func (s *server) notifyPublished(modPath, version string, u *accounts.User, tok 
 	s.emailMaintainersWho(modPath, accounts.EmailPublish, fmt.Sprintf("%s %s was published", modPath, version),
 		fmt.Sprintf("@%s published %s@%s using the API token %q (from %s).\n\n%s%s\n\nIf you didn't expect this, revoke the token at %s/account and yank the version from the module's Manage tab.",
 			u.Username, modPath, version, tok.Name, ip, s.siteURL, s.project.URL(modPath, version), s.siteURL))
+}
+
+// Sensitive changes need the current password, so a stolen session cookie
+// alone can't plant lasting access (an API token, an authenticator app, a
+// passkey). Guesses are limited per account, whichever address they're from.
+
+const tooManyTries = "Too many attempts. Wait a few minutes and try again."
+
+func sensitiveKey(u *accounts.User) string { return "sensitive:" + strconv.FormatInt(u.ID, 10) }
+
+// confirmPassword checks the form's "password" field, returning a message
+// for the form when it isn't right.
+func (s *server) confirmPassword(r *http.Request, u *accounts.User) string {
+	return s.checkPassword(r, u, r.PostFormValue("password"))
+}
+
+func (s *server) checkPassword(r *http.Request, u *accounts.User, password string) string {
+	if !s.loginLimit.Allow(sensitiveKey(u)) {
+		return tooManyTries
+	}
+	switch err := s.accounts.ConfirmPassword(r.Context(), u, password); {
+	case errors.Is(err, accounts.ErrWrongPassword):
+		return "Enter your current password to confirm."
+	case err != nil:
+		s.log.Error("confirm password", "err", err)
+		return "Something went wrong. Try again."
+	}
+	return ""
+}
+
+// handleCancelEmailChange drops a pending email change.
+func (s *server) handleCancelEmailChange(w http.ResponseWriter, r *http.Request) {
+	u := s.requireUser(w, r)
+	if u == nil || !parseForm(w, r) {
+		return
+	}
+	if _, err := s.accounts.CancelEmailChange(r.Context(), u, s.clientOf(r)); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/account?done=email-cancelled", http.StatusSeeOther)
 }

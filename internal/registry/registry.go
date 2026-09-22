@@ -283,8 +283,12 @@ func (r *Registry) Publish(ctx context.Context, u Upload) (*Published, error) {
 	}
 	var moduleID int64
 	var owner string
-	if err := tx.QueryRowContext(ctx, `SELECT id, namespace FROM modules WHERE path = ?`, u.Module).Scan(&moduleID, &owner); err != nil {
+	var quarantined sql.NullInt64
+	if err := tx.QueryRowContext(ctx, `SELECT id, namespace, quarantined_at FROM modules WHERE path = ?`, u.Module).Scan(&moduleID, &owner, &quarantined); err != nil {
 		return nil, fmt.Errorf("publish %s: %w", u.Module, err)
+	}
+	if quarantined.Valid { // quarantined while this upload was being checked
+		return nil, reject(http.StatusForbidden, "quarantined", "%s is under review by the registry's administrators and can't receive new versions right now.", u.Module)
 	}
 	if owner != namespace {
 		return nil, fmt.Errorf("module %s belongs to namespace %q, not %q", u.Module, owner, namespace)
@@ -298,13 +302,13 @@ func (r *Registry) Publish(ctx context.Context, u Upload) (*Published, error) {
 		if namespace == u.User.Username {
 			role = "owner"
 		} else if err := tx.QueryRowContext(ctx, `SELECT 'maintainer' FROM organizations o JOIN org_members om ON om.org_id = o.id
-				WHERE o.name = ? AND om.user_id = ? AND om.role = 'member' AND o.member_access = 'none'`,
+				WHERE o.name = ? AND om.user_id = ? AND om.role = 'member' AND om.accepted_at IS NOT NULL AND o.member_access = 'none'`,
 			namespace, u.User.ID).Scan(&role); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("publish %s: %w", u.Module, err)
 		}
 		if role != "" {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO module_roles (module_id, user_id, role, created_by, created_at) VALUES (?, ?, ?, ?, ?)`,
-				moduleID, u.User.ID, role, u.User.ID, now.Unix()); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO module_roles (module_id, user_id, role, created_by, created_at, accepted_at) VALUES (?, ?, ?, ?, ?, ?)`,
+				moduleID, u.User.ID, role, u.User.ID, now.Unix(), now.Unix()); err != nil {
 				return nil, fmt.Errorf("publish %s: record %s: %w", u.Module, role, err)
 			}
 		}
@@ -419,6 +423,9 @@ func checkOrigin(u *Upload) error {
 	return nil
 }
 
+// maxGoModSize is the largest go.mod accepted: Kubernetes' is about 20 KB.
+const maxGoModSize = 1 << 20
+
 func readGoMod(zipFile string, mv xmodule.Version) ([]byte, error) {
 	zr, err := zip.OpenReader(zipFile)
 	if err != nil {
@@ -435,9 +442,14 @@ func readGoMod(zipFile string, mv xmodule.Version) ([]byte, error) {
 			return nil, reject(http.StatusUnprocessableEntity, "invalid_zip", "go.mod can't be read: %v", err)
 		}
 		defer rc.Close()
-		data, err := io.ReadAll(io.LimitReader(rc, 16<<20+1))
+		data, err := io.ReadAll(io.LimitReader(rc, maxGoModSize+1))
 		if err != nil {
 			return nil, reject(http.StatusUnprocessableEntity, "invalid_zip", "go.mod can't be read: %v", err)
+		}
+		if len(data) > maxGoModSize {
+			// Each requirement is a row written while publishing holds the
+			// database's write lock; real go.mod files are a few KB.
+			return nil, reject(http.StatusUnprocessableEntity, "go_mod_too_large", "go.mod is larger than %d KB.", maxGoModSize>>10)
 		}
 		mf, err := modfile.ParseLax("go.mod", data, nil)
 		if err != nil {
@@ -599,6 +611,10 @@ func (z *blobZip) WriteTo(w io.Writer) (int64, error) {
 	defer z.r.Close()
 	return io.Copy(w, z.r)
 }
+
+// Close releases the zip without reading it, e.g. after a HEAD request.
+// Closing twice is harmless.
+func (z *blobZip) Close() error { return z.r.Close() }
 
 // VersionFS exposes a published version's files, read straight from its
 // zip. Close the returned io.Closer when done.
@@ -826,7 +842,8 @@ func (r *Registry) MajorVersions(ctx context.Context, modPath string) ([]string,
 	// LIKE here, and scanning every module made this most of a project
 	// page's cost at 100,000 modules.
 	rows, err := r.DB.QueryContext(ctx, `SELECT m.path FROM modules m
-		WHERE (m.path = ? OR (m.path >= ? AND m.path < ?)) AND EXISTS (SELECT 1 FROM versions v WHERE v.module_id = m.id)`,
+		WHERE (m.path = ? OR (m.path >= ? AND m.path < ?)) AND m.quarantined_at IS NULL
+			AND EXISTS (SELECT 1 FROM versions v WHERE v.module_id = m.id)`,
 		base, base+"/v", base+"/w")
 	if err != nil {
 		return nil, fmt.Errorf("list major versions of %s: %w", base, err)

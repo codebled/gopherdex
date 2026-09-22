@@ -437,7 +437,9 @@
   const register = document.querySelector("[data-passkey-register]");
   if (register) wire(register, async () => {
     const name = document.getElementById("passkey-name").value.trim();
-    const options = await post("/account/passkeys/options");
+    const password = document.getElementById("passkey-password");
+    const options = await post("/account/passkeys/options", { password: password.value });
+    password.value = "";
     const cred = await navigator.credentials.create({ publicKey: creationOptions(options) });
     const result = await post(`/account/passkeys?name=${encodeURIComponent(name)}`, credentialJSON(cred));
     if (result.recoveryCodes && result.recoveryCodes.length) {

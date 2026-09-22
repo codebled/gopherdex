@@ -21,9 +21,14 @@ var (
 const (
 	resetTTL        = time.Hour
 	challengeTTL    = 5 * time.Minute
-	maxCodeAttempts = 5
-	recoveryCodes   = 10
-	issuer          = "Gopherdex"
+	maxCodeAttempts = 5 // per sign-in
+
+	// maxCodeFailures wrong two-factor codes per codeFailureWindow pause
+	// code sign-ins for the account, whatever address they come from.
+	maxCodeFailures   = 10
+	codeFailureWindow = time.Hour
+	recoveryCodes     = 10
+	issuer            = "Gopherdex"
 )
 
 // notify emails u about a change to their account in the background, so a
@@ -79,12 +84,22 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string, c Clie
 		return err
 	}
 	link := strings.TrimSuffix(s.BaseURL, "/") + "/reset-password?" + url.Values{"token": {secret}}.Encode()
-	return s.Mailer.Send(ctx, mail.Message{
+	msg := mail.Message{
 		To:      u.Email,
 		Subject: "Reset your Gopherdex password",
 		Body: fmt.Sprintf("Hi %s,\n\nSomeone asked to reset the password for @%s. Choose a new one here:\n\n%s\n\nThe link works once and expires in an hour. If you didn't ask for this, ignore this email; your password hasn't changed.\n",
 			u.Username, u.Username, link),
-	})
+	}
+	// Sent in the background, so the response takes as long for an address
+	// with an account as for one without: timing can't reveal accounts.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := s.Mailer.Send(ctx, msg); err != nil {
+			s.log().Error("send password reset email", "user", u.Username, "err", err)
+		}
+	}()
+	return nil
 }
 
 // CheckResetToken reports whether a reset link is still valid.
@@ -127,7 +142,7 @@ func (s *Service) ResetPassword(ctx context.Context, secret, password string, c 
 	if err := s.setPassword(ctx, u, password, "", "password.reset", c); err != nil {
 		return nil, err
 	}
-	s.notify(u, "Your Gopherdex password was reset", "The password for @"+u.Username+" was just reset using an email link. You've been signed out everywhere.")
+	s.notify(u, "Your Gopherdex password was reset", "The password for @"+u.Username+" was just reset using an email link. Every session was signed out and any pending email change was cancelled. API tokens and passkeys still work: review them on your account and security pages.")
 	return u, nil
 }
 
@@ -176,6 +191,9 @@ func (s *Service) setPassword(ctx context.Context, u *User, password, keepSessio
 		{`DELETE FROM sessions WHERE user_id = ? AND token_hash IS NOT ?`, []any{u.ID, keep}},
 		{`DELETE FROM password_resets WHERE user_id = ?`, []any{u.ID}},
 		{`DELETE FROM login_challenges WHERE user_id = ?`, []any{u.ID}},
+		// A pending email change may be an attacker's: after a password
+		// reset it would otherwise still let them take the account back.
+		{`DELETE FROM email_verifications WHERE user_id = ? AND email != (SELECT email FROM users WHERE id = ?)`, []any{u.ID, u.ID}},
 	}
 	for _, st := range stmts {
 		if _, err := tx.ExecContext(ctx, st.q, st.args...); err != nil {
@@ -205,6 +223,10 @@ func (s *Service) SignOutOthers(ctx context.Context, u *User, keepSession string
 		return 0, fmt.Errorf("sign out other sessions: %w", err)
 	}
 	n, _ := res.RowsAffected()
+	// Whoever held another session may have started an email change.
+	if _, err := s.DB.ExecContext(ctx, `DELETE FROM email_verifications WHERE user_id = ? AND email != (SELECT email FROM users WHERE id = ?)`, u.ID, u.ID); err != nil {
+		return int(n), fmt.Errorf("cancel email change: %w", err)
+	}
 	s.auditNoTx(ctx, u.ID, "sessions.revoked", fmt.Sprintf("%d sessions", n), c)
 	return int(n), nil
 }
@@ -414,23 +436,42 @@ func (s *Service) CompleteLogin(ctx context.Context, challenge, code string, c C
 	if !ok {
 		return "", nil, ErrInvalidToken
 	}
+	// Each attempt is counted before the code is checked, in one statement,
+	// so parallel guesses against one challenge can't all see a low count.
 	var userID int64
-	var attempts int
-	err := s.DB.QueryRowContext(ctx, `SELECT user_id, attempts FROM login_challenges WHERE token_hash = ? AND expires_at > ?`,
-		digest, s.now().Unix()).Scan(&userID, &attempts)
+	err := s.DB.QueryRowContext(ctx, `UPDATE login_challenges SET attempts = attempts + 1
+		WHERE token_hash = ? AND expires_at > ? AND attempts < ? RETURNING user_id`,
+		digest, s.now().Unix(), maxCodeAttempts).Scan(&userID)
 	if errors.Is(err, sql.ErrNoRows) {
+		res, _ := s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest)
+		if n, _ := res.RowsAffected(); n > 0 {
+			return "", nil, ErrTooManyAttempts
+		}
 		return "", nil, ErrInvalidToken
 	}
 	if err != nil {
 		return "", nil, err
 	}
-	if attempts >= maxCodeAttempts {
-		s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest)
+	// Across challenges, too: someone who knows the password can start a
+	// new sign-in for five more guesses, from as many addresses as they like.
+	var failures int
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM audit_log WHERE user_id = ? AND action = 'login.failed'
+		AND detail = 'wrong 2FA code' AND created_at > ?`, userID, s.now().Add(-codeFailureWindow).Unix()).Scan(&failures); err != nil {
+		return "", nil, err
+	}
+	if failures >= maxCodeFailures {
 		return "", nil, ErrTooManyAttempts
 	}
 	if err := s.verifySecondFactor(ctx, userID, code); err != nil {
-		s.DB.ExecContext(ctx, `UPDATE login_challenges SET attempts = attempts + 1 WHERE token_hash = ?`, digest)
 		s.auditNoTx(ctx, userID, "login.failed", "wrong 2FA code", c)
+		if failures+1 == maxCodeFailures {
+			if u, uerr := s.userByID(ctx, userID); uerr == nil {
+				s.notify(u, "Repeated wrong sign-in codes on your Gopherdex account",
+					fmt.Sprintf("Someone signed in to @%s with the right password but entered a wrong two-factor code %d times in the last hour. "+
+						"Your password is probably known to someone else. Change it now. Sign-ins with codes are paused for an hour; passkeys still work.",
+						u.Username, maxCodeFailures))
+			}
+		}
 		return "", nil, err
 	}
 	s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest)
@@ -479,3 +520,34 @@ func (s *Service) UserEmails(ctx context.Context, usernames []string) (map[strin
 // Notify emails u about a change to their account or modules, with advice
 // on what to do if they didn't make it.
 func (s *Service) Notify(u *User, subject, body string) { s.notify(u, subject, body) }
+
+// ConfirmPassword checks u's current password before a sensitive change,
+// such as creating an API token, turning on an authenticator app or adding
+// a passkey, so a stolen session alone can't plant lasting access.
+func (s *Service) ConfirmPassword(ctx context.Context, u *User, password string) error {
+	var hash string
+	if err := s.DB.QueryRowContext(ctx, `SELECT password_hash FROM users WHERE id = ?`, u.ID).Scan(&hash); err != nil {
+		return err
+	}
+	ok, err := checkPassword(password, hash)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrWrongPassword
+	}
+	return nil
+}
+
+// CancelEmailChange drops a pending change of u's email address.
+func (s *Service) CancelEmailChange(ctx context.Context, u *User, c Client) (bool, error) {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM email_verifications WHERE user_id = ? AND email != (SELECT email FROM users WHERE id = ?)`, u.ID, u.ID)
+	if err != nil {
+		return false, fmt.Errorf("cancel email change: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n > 0 {
+		s.auditNoTx(ctx, u.ID, "email.change_cancelled", "", c)
+	}
+	return n > 0, nil
+}

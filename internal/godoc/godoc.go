@@ -25,6 +25,17 @@ import (
 
 const maxFileSize = 1 << 20
 
+// Parsing keeps a directory's syntax trees in memory until its docs are
+// built, and a parsed file takes tens of times its size. Uploads are
+// untrusted, so the source parsed per directory and per module is capped:
+// past the cap, files are left out and the package is marked Partial.
+// (Security review: 500 one-megabyte files in one directory took about
+// 18 GB and crashed the server.)
+const (
+	maxDirSource    = 2 << 20
+	maxModuleSource = 32 << 20
+)
+
 // Package is the documentation of one package.
 type Package struct {
 	ImportPath string    `json:"importPath"`
@@ -38,7 +49,8 @@ type Package struct {
 	Types      []Type    `json:"types"`
 	Examples   []Example `json:"examples,omitempty"` // package-level examples
 	Imports    []string  `json:"imports"`
-	Files      []string  `json:"files"` // source files, relative to the module root
+	Files      []string  `json:"files"`             // source files, relative to the module root
+	Partial    bool      `json:"partial,omitempty"` // some files were too large to document
 
 	Anchor  string        `json:"-"` // HTML id of the package's section
 	DocHTML template.HTML `json:"-"`
@@ -183,11 +195,12 @@ func ExtractWith(ctx context.Context, fsys fs.FS, modulePath string, opts Option
 	}
 
 	pkgs := []Package{}
+	budget := maxModuleSource
 	for _, dir := range slices.Sorted(maps.Keys(dirs)) {
 		if !local[joinPath(modulePath, dir)] {
 			continue // only tests here
 		}
-		pkg, err := extractDir(fsys, modulePath, dir, dirs[dir], local, opts)
+		pkg, err := extractDir(fsys, modulePath, dir, dirs[dir], local, opts, &budget)
 		if err != nil {
 			return nil, err
 		}
@@ -203,10 +216,16 @@ func joinPath(modulePath, dir string) string {
 	return modulePath + "/" + dir
 }
 
-func extractDir(fsys fs.FS, modulePath, dir string, names []string, local map[string]bool, opts Options) (Package, error) {
+func extractDir(fsys fs.FS, modulePath, dir string, names []string, local map[string]bool, opts Options, budget *int) (Package, error) {
 	fset := token.NewFileSet()
 	byName := map[string][]*ast.File{}
 	tests := map[string][]*ast.File{}
+	dirLeft, partial := maxDirSource, false
+	// Package files before tests, so a budget spent on tests never hides docs.
+	names = slices.Clone(names)
+	slices.SortStableFunc(names, func(a, b string) int {
+		return cmpBool(strings.HasSuffix(a, "_test.go"), strings.HasSuffix(b, "_test.go"))
+	})
 	for _, name := range names {
 		st, err := fs.Stat(fsys, name)
 		if err != nil {
@@ -215,6 +234,12 @@ func extractDir(fsys fs.FS, modulePath, dir string, names []string, local map[st
 		if st.Size() > maxFileSize {
 			continue // generated tables and the like; not worth documenting
 		}
+		if int(st.Size()) > dirLeft || int(st.Size()) > *budget {
+			partial = true
+			continue
+		}
+		dirLeft -= int(st.Size())
+		*budget -= int(st.Size())
 		src, err := fs.ReadFile(fsys, name)
 		if err != nil {
 			return Package{}, fmt.Errorf("read %s: %w", name, err)
@@ -243,6 +268,11 @@ func extractDir(fsys fs.FS, modulePath, dir string, names []string, local map[st
 	}
 
 	importPath := joinPath(modulePath, dir)
+	if len(byName[pkgName]) == 0 && partial {
+		// Every file was over the budget: list the package without docs.
+		return Package{ImportPath: importPath, Types: []Type{}, Imports: []string{}, Files: []string{}, Partial: true,
+			Anchor: PackageAnchor(modulePath, importPath)}, nil
+	}
 	files := append(slices.Clone(byName[pkgName]), tests[pkgName]...)
 	p, err := doc.NewFromFiles(fset, files, importPath)
 	if err != nil {
@@ -265,6 +295,7 @@ func extractDir(fsys fs.FS, modulePath, dir string, names []string, local map[st
 		Files:      []string{},
 		Anchor:     PackageAnchor(modulePath, importPath),
 		DocHTML:    r.html(p.Doc, PackageAnchor(modulePath, importPath)),
+		Partial:    partial,
 	}
 	imports := map[string]bool{}
 	for _, f := range byName[pkgName] {
@@ -474,4 +505,15 @@ func deprecated(text string) bool {
 		}
 	}
 	return false
+}
+
+// cmpBool orders false before true.
+func cmpBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case !a:
+		return -1
+	}
+	return 1
 }

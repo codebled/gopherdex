@@ -33,7 +33,8 @@ var majorVersion = regexp.MustCompile(`^v[0-9]+$`)
 
 // reserved names would collide with site routes or mislead users.
 var reserved = []string{
-	"about", "account", "accounts", "admin", "administrator", "api", "app", "assets", "auth",
+	"about", "account", "accounts", "admin", "administrator", "advisories", "advisory", "api", "app", "assets", "auth",
+	"badge", "badges", "feed", "feeds", "vulndb", "vuln",
 	"blog", "docs", "download", "downloads", "favicon.ico", "gopherdex", "golang", "go",
 	"healthz", "help", "join", "legal", "login", "logout", "mail", "modules", "new", "publish", "news", "org",
 	"orgs", "organizations", "privacy", "project", "projects", "proxy", "register", "report", "reset-password", "forgot-password", "root",

@@ -328,3 +328,36 @@ func randomText(n int) string {
 	}
 	return b.String()
 }
+
+// setOrgMember adds someone to an organization and accepts the invitation
+// as them, for tests about what members can do. TestInvitations covers the
+// invitation itself.
+func (f *fixture) setOrgMember(ctx context.Context, u *accounts.User, org, username, role string, c accounts.Client) error {
+	if err := f.reg.SetOrgMember(ctx, u, org, username, role, c); err != nil {
+		return err
+	}
+	return f.acceptAs(ctx, username, InviteOrg, org)
+}
+
+// setCollaborator does the same for a role on a module.
+func (f *fixture) setCollaborator(ctx context.Context, u *accounts.User, modPath, username, role string, c accounts.Client) error {
+	if err := f.reg.SetCollaborator(ctx, u, modPath, username, role, c); err != nil {
+		return err
+	}
+	return f.acceptAs(ctx, username, InviteModule, modPath)
+}
+
+func (f *fixture) acceptAs(ctx context.Context, username, kind, name string) error {
+	var id int64
+	if err := f.reg.DB.QueryRowContext(ctx, `SELECT id FROM users WHERE username = ?`, accounts.NormalizeUsername(strings.TrimPrefix(username, "@"))).Scan(&id); err != nil {
+		return err
+	}
+	u, err := f.accts.UserByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := f.reg.AcceptInvitation(ctx, u, kind, name, client); err != nil && !isReject(err, http.StatusNotFound, "no_invitation") {
+		return err // already accepted is fine: a role change
+	}
+	return nil
+}

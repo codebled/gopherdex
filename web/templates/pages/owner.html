@@ -48,7 +48,7 @@
       <ul class="collab-list">
         {{range .Members}}
         <li>
-          <span><a href="/{{.Username}}">@{{.Username}}</a> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span></span>
+          <span><a href="/{{.Username}}">@{{.Username}}</a> <span class="pill {{if eq .Role "owner"}}p-hosted{{else}}p-version{{end}}">{{.Role}}</span>{{if .Pending}} <span class="pill p-pre">invited</span>{{end}}</span>
           {{if $.Data.IsOrgOwner}}
           <form class="inline-form" action="/-/orgs/members/remove" method="post">
             <input type="hidden" name="org" value="{{$.Data.Namespace}}"><input type="hidden" name="username" value="{{.Username}}">

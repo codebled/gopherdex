@@ -217,3 +217,11 @@ func TestPasswordHash(t *testing.T) {
 		t.Fatal("foreign hash format accepted")
 	}
 }
+
+func TestRouteNamesAreReserved(t *testing.T) {
+	for _, name := range []string{"advisories", "feeds", "vulndb", "badge", "api", "orgs"} {
+		if ValidateNamespace(name) == nil {
+			t.Errorf("%q can be registered, but it's a site route", name)
+		}
+	}
+}

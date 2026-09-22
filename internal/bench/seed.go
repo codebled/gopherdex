@@ -563,6 +563,7 @@ func (s *seeder) accounts(ctx context.Context) error {
 			m := s.nsOrder[(len(org)*7+i*13)%len(s.users)]
 			if m != ownerName {
 				s.reg.SetOrgMember(ctx, s.users[ownerName], org, m, "member", c)
+				s.reg.AcceptInvitation(ctx, s.users[m], registry.InviteOrg, org, c)
 			}
 		}
 	}

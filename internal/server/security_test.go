@@ -20,6 +20,13 @@ import (
 	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
 )
 
+// reset forgets the mail sent so far.
+func (m *mailRecorder) reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = nil
+}
+
 func (m *mailRecorder) find(t *testing.T, to, subject string) string {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second) // some mail is sent in the background
@@ -82,7 +89,10 @@ func TestTwoFactorAdminAndReports(t *testing.T) {
 	secret := regexp.MustCompile(`<code class="secret">([A-Z2-7]+)</code>`).FindStringSubmatch(body)[1]
 	now := time.Now()
 	code, _ := accounts.TOTPCode(secret, now)
+	// A stolen session can't turn on its own authenticator: the password is needed.
 	resp, body = alice.post("/account/security/2fa", url.Values{"code": {code}})
+	expect(t, resp, body, http.StatusUnprocessableEntity, "Enter your current password")
+	resp, body = alice.post("/account/security/2fa", url.Values{"code": {code}, "password": {"correct horse battery"}})
 	expect(t, resp, body, http.StatusOK, "Save these recovery codes")
 	env.mails.find(t, "alice@example.com", "Two-factor authentication is on")
 
@@ -175,13 +185,13 @@ func TestScopedTokenAndPublishEmail(t *testing.T) {
 
 	alice := newBrowser(t, env.srv.URL)
 	alice.post("/login", url.Values{"login": {"alice"}, "password": {"correct horse battery"}})
-	resp, body := alice.post("/account/tokens", url.Values{"name": {"ci"}, "expires": {"30"}, "module": {mod}})
+	resp, body := alice.post("/account/tokens", url.Values{"name": {"ci"}, "expires": {"30"}, "module": {mod}, "password": {"correct horse battery"}})
 	expect(t, resp, body, http.StatusCreated, "Copy it now")
 	token := regexp.MustCompile(`gdx_[A-Za-z0-9_-]{43}`).FindString(body)
 	env.mails.find(t, "alice@example.com", "New Gopherdex API token")
 	resp, body = alice.get("/account")
 	expect(t, resp, body, http.StatusOK, "<code>gopherdex.test/alice/retry</code>")
-	resp, body = alice.post("/account/tokens", url.Values{"name": {"x"}, "expires": {"30"}, "module": {"gopherdex.test/bob/other"}})
+	resp, body = alice.post("/account/tokens", url.Values{"name": {"x"}, "expires": {"30"}, "module": {"gopherdex.test/bob/other"}, "password": {"correct horse battery"}})
 	expect(t, resp, body, http.StatusUnprocessableEntity, "Choose one of your modules.")
 
 	// The module token publishes its module, and every maintainer is told.

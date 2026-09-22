@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +39,16 @@ func newService(t *testing.T) *Service {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return &Service{Local: st, Public: fakePublic{}, Index: fakeIndex{}, ProxyPrefix: "/api/proxy", DocsBase: "https://pkg.go.dev"}
+	svc := &Service{Local: st, Public: fakePublic{}, Index: fakeIndex{}, ProxyPrefix: "/api/proxy", DocsBase: "https://pkg.go.dev"}
+	// In the server this is the registry's full-text index.
+	svc.HostedSearch = func(ctx context.Context, query string, limit int) ([]Result, error) {
+		m, err := svc.Module(ctx, "example.com/hello", "")
+		if err != nil || !strings.Contains(strings.ToLower(m.Path+" "+m.Synopsis), strings.ToLower(strings.Fields(query)[0])) {
+			return nil, err
+		}
+		return []Result{{Path: m.Path, Version: m.Version, Synopsis: m.Synopsis, Origin: Hosted}}, nil
+	}
+	return svc
 }
 
 type fakePublic struct{}
@@ -142,5 +152,17 @@ func TestPublicModule(t *testing.T) {
 	}
 	if _, err := s.Module(ctx, "not a path", ""); !errors.Is(err, module.ErrInvalid) {
 		t.Errorf("bad path: %v, want ErrInvalid", err)
+	}
+}
+
+func TestOwnPathsNeverComeFromPublic(t *testing.T) {
+	s := newService(t)
+	// Pretend the registry's host is github.com, where the fake mirror has a module.
+	if _, err := s.Module(context.Background(), "github.com/acme/router", ""); err != nil {
+		t.Fatalf("without a module host, public lookup should apply: %v", err)
+	}
+	s.ModuleHost = "github.com"
+	if _, err := s.Module(context.Background(), "github.com/acme/router", ""); !errors.Is(err, module.ErrNotFound) {
+		t.Fatalf("a path under the registry's host came from the public mirror: %v", err)
 	}
 }

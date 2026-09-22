@@ -137,3 +137,40 @@ func TestTyposquat(t *testing.T) {
 		t.Errorf("distance = %d", d)
 	}
 }
+
+func TestZipHidingPlaces(t *testing.T) {
+	huge := "package m\n\n// " + strings.Repeat("padding ", (maxGoFile/8)+10) + "\nfunc init() {}\n"
+	files := map[string]string{
+		"go.mod":                  "module example.com/m\n",
+		"rsrc_windows_amd64.syso": "\x64\x86\x02\x00", // a COFF object: no executable header
+		"lib/helper.o":            "\x7fELF-ish but renamed",
+		"testdata/fixture.syso":   "\x64\x86",
+		"generated.go":            huge,
+		"small.go":                "package m\n",
+	}
+	findings, err := Zip(writeZip(t, "example.com/m@v1.0.0/", files), "example.com/m@v1.0.0/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, f := range findings {
+		got[f.File] = f.Rule + "/" + string(f.Severity)
+	}
+	for file, want := range map[string]string{
+		"rsrc_windows_amd64.syso": "object-file/warn",
+		"generated.go":            "unscanned/warn",
+	} {
+		if got[file] != want {
+			t.Errorf("%s: %q, want %q (all: %v)", file, got[file], want, got)
+		}
+	}
+	if _, ok := got["testdata/fixture.syso"]; ok {
+		t.Error("testdata objects are fixtures, not linked into builds")
+	}
+	if _, ok := got["small.go"]; ok {
+		t.Error("a clean file was flagged")
+	}
+	if got["lib/helper.o"] == "" {
+		t.Error("an object file was missed")
+	}
+}

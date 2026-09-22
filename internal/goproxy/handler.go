@@ -145,6 +145,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", cacheImmutable)
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodHead {
+			// WriteTo is what closes the zip, and a HEAD never calls it.
+			if c, ok := z.(io.Closer); ok {
+				c.Close()
+			}
 			return
 		}
 		if n, err := z.WriteTo(w); err != nil {

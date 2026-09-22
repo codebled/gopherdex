@@ -15,6 +15,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +36,38 @@ type S3 struct {
 	Session   string // temporary credentials' session token, if any
 	HTTP      *http.Client
 	Now       func() time.Time
+
+	slotsOnce sync.Once
+	slots     chan struct{} // bounds downloads held in memory or on disk at once
+}
+
+// maxOpenBlobs bounds concurrent Opens: each holds up to 16 MB in memory,
+// or a temporary file, until closed. Without a bound, a burst of parallel
+// downloads of one large zip could take all memory or disk.
+const maxOpenBlobs = 16
+
+// acquire waits for a free download slot; the returned func gives it back.
+func (s *S3) acquire(ctx context.Context) (func(), error) {
+	s.slotsOnce.Do(func() { s.slots = make(chan struct{}, maxOpenBlobs) })
+	select {
+	case s.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	var once sync.Once
+	return func() { once.Do(func() { <-s.slots }) }, nil
+}
+
+// releasing gives back a download slot when its reader is closed.
+type releasing struct {
+	Reader
+	release func()
+}
+
+func (r releasing) Close() error {
+	err := r.Reader.Close()
+	r.release()
+	return err
 }
 
 // maxMemoryBlob is the largest blob Open keeps in memory; bigger ones go
@@ -201,6 +234,19 @@ func (s *S3) Open(ctx context.Context, key string) (Reader, error) {
 	if err := checkKey(key); err != nil {
 		return nil, err
 	}
+	release, err := s.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rd, err := s.open(ctx, key)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	return releasing{rd, release}, nil
+}
+
+func (s *S3) open(ctx context.Context, key string) (Reader, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.objectURL(key).String(), nil)
 	if err != nil {
 		return nil, err

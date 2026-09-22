@@ -216,6 +216,9 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("POST /account/email/resend", s.handleResendVerification)
 	mux.HandleFunc("POST /account/tokens", s.handleCreateToken)
 	mux.HandleFunc("POST /account/email", s.handleChangeEmail)
+	mux.HandleFunc("POST /account/email/cancel", s.handleCancelEmailChange)
+	mux.HandleFunc("POST /account/invitations/accept", s.handleInvitation(true))
+	mux.HandleFunc("POST /account/invitations/decline", s.handleInvitation(false))
 	mux.HandleFunc("POST /account/preferences", s.handlePreferences)
 	mux.HandleFunc("POST /account/delete", s.handleDeleteAccount)
 	mux.HandleFunc("POST /account/tokens/{id}/revoke", s.handleRevokeToken)
@@ -229,6 +232,8 @@ func New(cfg Config) (http.Handler, error) {
 	mux.HandleFunc("POST /-/orgs", s.handleCreateOrg)
 	mux.HandleFunc("POST /-/orgs/members", s.handleSetOrgMember)
 	mux.HandleFunc("POST /-/orgs/members/remove", s.handleRemoveOrgMember)
+	mux.HandleFunc("POST /-/orgs/leave", s.handleLeaveOrg)
+	mux.HandleFunc("POST /-/collaborators/leave", s.handleLeaveModule)
 	mux.HandleFunc("POST /-/orgs/access", s.handleMemberAccess)
 	mux.HandleFunc("POST /-/orgs/teams", s.handleCreateTeam)
 	mux.HandleFunc("POST /-/orgs/teams/delete", s.handleDeleteTeam)
@@ -284,6 +289,9 @@ func New(cfg Config) (http.Handler, error) {
 		http.Error(w, "Cross-site request refused.", http.StatusForbidden)
 	}))
 
+	if cfg.Discovery != nil && cfg.Discovery.HostedSearch == nil && cfg.Registry != nil {
+		cfg.Discovery.HostedSearch = s.hostedResults
+	}
 	return s.logRequests(s.recoverPanics(securityHeaders(s.secureCookies, csrf.Handler(withUserCache(mux))))), nil
 }
 
@@ -511,10 +519,6 @@ func (s *server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, apiError{"scope must be hosted or public."})
 		return
 	}
-	if scope == discovery.ScopeHosted {
-		s.searchHostedJSON(w, r, q)
-		return
-	}
 	resp, err := s.disc.Search(r.Context(), q, scope)
 	if err != nil {
 		s.apiError(w, r, err)
@@ -660,20 +664,19 @@ func (s *server) logRequests(next http.Handler) http.Handler {
 	})
 }
 
-// searchHostedJSON answers /api/search?scope=hosted from the search index.
-func (s *server) searchHostedJSON(w http.ResponseWriter, r *http.Request, q string) {
-	resp := discovery.SearchResponse{Query: strings.TrimSpace(q), Results: []discovery.Result{}}
-	if resp.Query != "" {
-		hits, _, err := s.registry.Search(r.Context(), registry.SearchQuery{Text: resp.Query, Sort: registry.SortRelevance, Limit: 20})
-		if err != nil {
-			s.apiError(w, r, err)
-			return
-		}
-		for _, h := range hits {
-			resp.Results = append(resp.Results, discovery.Result{Path: h.Path, Version: h.Version, Synopsis: h.Synopsis, Origin: discovery.Hosted})
-		}
+// hostedResults feeds discovery's search from the full-text index. (It used
+// to load every hosted module and its docs on each query: the security
+// review found one anonymous request could read the whole registry.)
+func (s *server) hostedResults(ctx context.Context, query string, limit int) ([]discovery.Result, error) {
+	hits, _, err := s.registry.Search(ctx, registry.SearchQuery{Text: query, Sort: registry.SortRelevance, Limit: limit})
+	if err != nil {
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, resp)
+	out := make([]discovery.Result, 0, len(hits))
+	for _, h := range hits {
+		out = append(out, discovery.Result{Path: h.Path, Version: h.Version, Synopsis: h.Synopsis, Origin: discovery.Hosted})
+	}
+	return out, nil
 }
 
 // limited applies the per-IP search limit to expensive read endpoints. The
@@ -681,7 +684,7 @@ func (s *server) searchHostedJSON(w http.ResponseWriter, r *http.Request, q stri
 // mirror fetch many files at once.
 func (s *server) limited(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.searchLimit.Allow(s.clientOf(r).IP) {
+		if !s.searchLimit.Allow(ipKey(s.clientOf(r).IP)) {
 			w.Header().Set("Retry-After", "60")
 			http.Error(w, "Too many requests. Wait a minute and try again.", http.StatusTooManyRequests)
 			return

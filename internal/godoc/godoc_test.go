@@ -2,6 +2,7 @@ package godoc
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -204,5 +205,27 @@ func ExamplePolicy_Next_second() {
 	}
 	if strings.Join(p.Imports, ",") != "errors,time" || strings.Join(p.Files, ",") != "retry.go" {
 		t.Errorf("imports %v files %v", p.Imports, p.Files)
+	}
+}
+
+func TestExtractBudget(t *testing.T) {
+	// One directory with far more source than the budget: documented
+	// partly, without parsing it all.
+	fsys := fstest.MapFS{"go.mod": {Data: []byte("module example.com/big\n")}}
+	line := "var _ = 1\n"
+	big := "// Package big is large.\npackage big\n\n" + strings.Repeat(line, (900<<10)/len(line))
+	for i := range 20 {
+		fsys[fmt.Sprintf("f%02d.go", i)] = &fstest.MapFile{Data: []byte(big)}
+	}
+	fsys["api.go"] = &fstest.MapFile{Data: []byte("package big\n\n// Hello says hi.\nfunc Hello() {}\n")}
+	pkgs, err := Extract(context.Background(), fsys, "example.com/big")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) != 1 || !pkgs[0].Partial || len(pkgs[0].Files) > 3 {
+		t.Fatalf("got %d packages, partial %v, %d files", len(pkgs), len(pkgs) > 0 && pkgs[0].Partial, len(pkgs[0].Files))
+	}
+	if len(pkgs[0].Funcs) != 1 || pkgs[0].Funcs[0].Name != "Hello" {
+		t.Errorf("small files within the budget should still be documented: %+v", pkgs[0].Funcs)
 	}
 }

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
 	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
@@ -98,12 +100,32 @@ func (s *server) clientOf(r *http.Request) accounts.Client {
 	return accounts.Client{IP: ip, UserAgent: r.UserAgent()}
 }
 
-// safeNext allows only same-site relative redirect targets.
+// safeNext allows only same-site relative redirect targets. Browsers strip
+// tabs and newlines from URLs and treat "\\" like "/", so "/\t/evil.example"
+// would become "//evil.example": anything with those is refused, and what
+// passes is parsed and written out again.
 func safeNext(next string) string {
-	if !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") || strings.HasPrefix(next, "/\\") {
-		return "/account"
+	const fallback = "/account"
+	if strings.ContainsAny(next, "\\") || strings.ContainsFunc(next, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) {
+		return fallback
 	}
-	return next
+	u, err := url.Parse(next)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Opaque != "" ||
+		!strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
+		return fallback
+	}
+	return u.RequestURI()
+}
+
+// ipKey is the rate-limit key for a client address. IPv6 users usually get
+// a whole /64, so addresses in one /64 count as one client.
+func ipKey(ip string) string {
+	addr, err := netip.ParseAddr(ip)
+	if err != nil || addr.Is4() || addr.Is4In6() {
+		return "ip:" + ip
+	}
+	p, _ := addr.Prefix(64)
+	return "ip:" + p.String()
 }
 
 func parseForm(w http.ResponseWriter, r *http.Request) bool {
@@ -147,7 +169,7 @@ func (s *server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := s.clientOf(r)
-	if !s.signupLimit.Allow(c.IP) {
+	if !s.signupLimit.Allow(ipKey(c.IP)) {
 		s.tooManyRequests(w, r, "sign-up")
 		return
 	}
@@ -196,7 +218,7 @@ func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := s.clientOf(r)
-	if !s.loginLimit.Allow(c.IP) {
+	if !s.loginLimit.Allow(ipKey(c.IP)) {
 		s.tooManyRequests(w, r, "sign-in")
 		return
 	}
@@ -304,6 +326,7 @@ type accountData struct {
 	Tokens      []accounts.Token
 	Modules     []registry.ModuleSummary
 	Memberships []registry.Membership
+	Invitations []registry.Invitation
 	OrgName     string
 	NewToken    *newToken
 	TokenName   string
@@ -340,6 +363,10 @@ var notices = map[string]string{
 	"token-revoked":     "Token revoked. Anything using it can no longer publish.",
 	"email-change-sent": "Check your new inbox: the address changes when you open the link we sent there. Until then, emails still go to your current address.",
 	"email-changed":     "Your email address is changed. We told your old address too.",
+	"email-cancelled":   "Email change cancelled. Your address stays the same, and the link we sent no longer works.",
+	"invite-accepted":   "Invitation accepted. You have that role now.",
+	"invite-declined":   "Invitation declined.",
+	"left":              "Done. You no longer have that role.",
 	"preferences":       "Email preferences saved.",
 	"publisher-added":   "Trusted publisher added. Its workflow can publish the module's first release with gopherdex publish, no API token needed.",
 	"publisher-removed": "Trusted publisher removed.",
@@ -366,6 +393,10 @@ func (s *server) renderAccount(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 	if data.Memberships, err = s.registry.Memberships(r.Context(), u.ID); err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if data.Invitations, err = s.registry.Invitations(r.Context(), u); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
@@ -404,6 +435,10 @@ func (s *server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PostFormValue("name")
+	if msg := s.confirmPassword(r, u); msg != "" {
+		s.renderAccount(w, r, http.StatusUnprocessableEntity, accountData{TokenName: name, Errors: map[string]string{"token_password": msg}})
+		return
+	}
 	scope := ""
 	if m := r.PostFormValue("module"); m != "" {
 		// A token for one module; the user must maintain it.

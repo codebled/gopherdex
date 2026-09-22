@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -64,6 +65,14 @@ func (s *server) handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Req
 	if u == nil {
 		return
 	}
+	var body struct {
+		Password string `json:"password"`
+	}
+	json.NewDecoder(limitedBody(r)).Decode(&body)
+	if msg := s.checkPassword(r, u, body.Password); msg != "" {
+		writeJSON(w, http.StatusUnprocessableEntity, apiError{msg})
+		return
+	}
 	options, token, err := s.accounts.BeginPasskeyRegistration(r.Context(), u)
 	if err != nil {
 		s.passkeyError(w, r, err)
@@ -121,7 +130,7 @@ func (s *server) handlePasskeyLoginOptions(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) handlePasskeyLogin(w http.ResponseWriter, r *http.Request) {
-	if !s.loginLimit.Allow("ip:" + s.clientOf(r).IP) {
+	if !s.loginLimit.Allow(ipKey(s.clientOf(r).IP)) {
 		writeJSON(w, http.StatusTooManyRequests, apiError{"Too many sign-in attempts. Wait a few minutes and try again."})
 		return
 	}

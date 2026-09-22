@@ -2,7 +2,7 @@
 
 # Gopherdex registry server. The SQLite driver is pure Go, so the binaries
 # are static and the runtime image has no shell or package manager.
-FROM golang:1.26.6 AS build
+FROM golang:1.27.0 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

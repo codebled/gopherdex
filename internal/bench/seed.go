@@ -89,6 +89,9 @@ func Seed(ctx context.Context, cfg SeedConfig) (*SeedReport, error) {
 			return nil, err
 		}
 	}
+	if err := fenceOffFromGo(filepath.Dir(cfg.Upstream.Cache)); err != nil {
+		return nil, err
+	}
 	s := &seeder{cfg: cfg, rnd: mrand.New(mrand.NewPCG(cfg.Seed, 1)), rep: &SeedReport{Rejected: map[string]int{}}}
 	steps := []struct {
 		name string
@@ -792,4 +795,15 @@ func dirSize(dir string) (n int64) {
 		return nil
 	})
 	return n
+}
+
+// fenceOffFromGo puts a go.mod in the benchmark directory. The go command
+// treats it as a separate module and leaves it out of ./... patterns, which
+// would otherwise walk every cached file and published blob.
+func fenceOffFromGo(dir string) error {
+	p := filepath.Join(dir, "go.mod")
+	if _, err := os.Stat(p); err == nil {
+		return nil
+	}
+	return os.WriteFile(p, []byte("// Benchmark data from gdxbench; this file keeps go ./... out of it.\nmodule gdxbench.invalid/data\n"), 0o644)
 }

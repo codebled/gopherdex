@@ -10,17 +10,21 @@ run:
 run-offline:
 	go run ./cmd/gopherdexd -offline
 
+# Explicit patterns, not ./...: a benchmark dataset in bench/ holds about a
+# million files for the go command to walk.
+PKGS := ./cmd/... ./internal/... ./web/...
+
 test:
-	go test ./...
+	go test $(PKGS)
 
 vet:
-	go vet ./...
+	go vet $(PKGS)
 
 # What CI runs.
 check:
 	test -z "$$(gofmt -l cmd internal web)" || (gofmt -l cmd internal web && exit 1)
-	go vet ./...
-	go test ./...
+	go vet $(PKGS)
+	go test $(PKGS)
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/gopherdexd ./cmd/gopherdexd

@@ -25,7 +25,7 @@ func (r *Registry) Releases(ctx context.Context, namespace, modPath string, limi
 		WHERE m.quarantined_at IS NULL AND v.yanked_at IS NULL`
 	var args []any
 	if namespace != "" {
-		q += ` AND m.namespace = ?`
+		q += ` AND v.namespace = ?` // indexed with published_at, newest first
 		args = append(args, namespace)
 	}
 	if modPath != "" {

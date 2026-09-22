@@ -2,6 +2,7 @@
 // running server.
 //
 //	gdxbench seed [-profile small|full] [flags]   build a dataset in bench/
+//	gdxbench accounts [flags]                     credentials for write load (tokens, sign-ins)
 //	gdxbench load [flags]                         drive traffic at a server
 //
 // Seed samples real modules from index.golang.org and proxy.golang.org
@@ -15,6 +16,12 @@
 //
 //	gopherdexd -db bench/data/gopherdex.db -blobs bench/data/blobs -offline -trust-proxy
 //	gdxbench load -url http://localhost:8080 -c 64 -d 60s
+//
+// Mixed read and write load, e.g. for 30 minutes with two uploads and five
+// sign-ins a second:
+//
+//	gdxbench accounts
+//	gdxbench load -d 30m -publish-rate 2 -login-rate 5
 package main
 
 import (
@@ -58,6 +65,8 @@ func main() {
 		err = seed(ctx, os.Args[2:])
 	case "load":
 		err = load(ctx, os.Args[2:])
+	case "accounts":
+		err = prepareAccounts(ctx, os.Args[2:])
 	default:
 		usage()
 	}
@@ -68,7 +77,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: gdxbench seed [flags] | gdxbench load [flags]   (-h for flags)")
+	fmt.Fprintln(os.Stderr, "usage: gdxbench seed|accounts|load [flags]   (-h for flags)")
 	os.Exit(2)
 }
 
@@ -167,6 +176,11 @@ func load(ctx context.Context, args []string) error {
 	timeout := fs.Duration("timeout", 30*time.Second, "per-request timeout")
 	out := fs.String("out", "", "also write the report as JSON to this file")
 	remote := fs.Bool("i-own-this-server", false, "allow a non-local -url (only load servers you run)")
+	accts := fs.String("accounts", "bench/data/accounts.tsv", "credentials written by gdxbench accounts, for write load")
+	publishRate := fs.Float64("publish-rate", 0, "uploads per second through /api/upload, alongside the reads")
+	newShare := fs.Float64("new-share", 0.3, "fraction of uploads that are brand-new modules; the rest are new versions")
+	loginRate := fs.Float64("login-rate", 0, "password sign-ins per second")
+	window := fs.Duration("window", 30*time.Second, "timeline resolution in the report")
 	fs.Parse(args)
 
 	u, err := url.Parse(*base)
@@ -182,15 +196,36 @@ func load(ctx context.Context, args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "== loading %s: %d clients for %s (after %s warm-up)\n", *base, *conc, *dur, *warm)
 	rep, err := bench.Load(ctx, bench.LoadConfig{BaseURL: strings.TrimSuffix(*base, "/"), Modules: *modules, Duration: *dur, Warmup: *warm,
-		Concurrency: *conc, RPS: *rps, ClientIPs: *ips, Mix: m, Timeout: *timeout, Seed: time.Now().UnixNano(), Progress: os.Stderr})
+		Concurrency: *conc, RPS: *rps, ClientIPs: *ips, Mix: m, Timeout: *timeout, Seed: time.Now().UnixNano(), Progress: os.Stderr,
+		Accounts: *accts, PublishRate: *publishRate, NewModuleShare: *newShare, LoginRate: *loginRate, Window: *window})
 	if err != nil {
 		return err
 	}
 	fmt.Println()
 	rep.WriteTable(os.Stdout)
+	if len(rep.Timeline) > 1 {
+		fmt.Println()
+		rep.WriteTimeline(os.Stdout, *window)
+	}
 	if *out != "" {
 		return saveJSON(*out, rep)
 	}
+	return nil
+}
+
+func prepareAccounts(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("accounts", flag.ExitOnError)
+	dir := fs.String("dir", "bench", "the benchmark directory seed wrote")
+	publishers := fs.Int("publishers", 200, "existing publishers to give API tokens (each may upload 60 releases an hour)")
+	users := fs.Int("users", 50, "fresh accounts with known passwords, for sign-ins and brand-new modules")
+	fs.Parse(args)
+	out := filepath.Join(*dir, "data", "accounts.tsv")
+	n, err := bench.PrepareAccounts(ctx, bench.AccountsConfig{DB: filepath.Join(*dir, "data", "gopherdex.db"), Out: out,
+		Publishers: *publishers, NewUsers: *users})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%d accounts written to %s (test credentials for this local database; keep the file private)\n", n, out)
 	return nil
 }
 

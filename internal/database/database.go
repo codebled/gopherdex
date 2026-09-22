@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -41,7 +42,7 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 	// testing a 4.6 GB database spent three quarters of its CPU in pread.
 	// cache_size keeps a connection's hottest pages (8 MB each).
 	for _, p := range []string{"foreign_keys(1)", "journal_mode(WAL)", "busy_timeout(5000)", "synchronous(NORMAL)",
-		"mmap_size(2147483648)", "cache_size(-8000)"} {
+		"mmap_size(2147483648)", "cache_size(-8000)", "journal_size_limit(67108864)"} {
 		q.Add("_pragma", p)
 	}
 	q.Set("_txlock", "immediate")
@@ -49,6 +50,13 @@ func Open(ctx context.Context, path string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open database %s: %w", path, err)
 	}
+	// Queries run on the CPU (the driver is pure Go), so connections beyond
+	// the core count add no throughput. More matter for the write-ahead log:
+	// it has only a few reader slots, and dozens of overlapping readers
+	// keep some slot pinned to an old position, so checkpoints never catch
+	// up and the log grows without end (load testing, 32 clients).
+	db.SetMaxOpenConns(maxConns())
+	db.SetMaxIdleConns(maxConns())
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("open database %s: %w", path, err)
@@ -126,3 +134,6 @@ func apply(ctx context.Context, db *sql.DB, version int, name string) error {
 	}
 	return nil
 }
+
+// maxConns is the connection pool size: one per CPU core, at least 4.
+func maxConns() int { return max(4, runtime.GOMAXPROCS(0)) }

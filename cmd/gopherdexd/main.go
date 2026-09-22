@@ -190,6 +190,7 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+	go database.Checkpoint(ctx, db, 5*time.Second, log)
 
 	var mailer mail.Mailer = mail.LogMailer{Log: log}
 	if *smtpAddr != "" {

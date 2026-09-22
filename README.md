@@ -361,6 +361,8 @@ make bench-seed                 # small: 5,000 modules, ~25,000 versions (~5 min
 make bench-seed PROFILE=full    # 100,000 modules, ~1,000,000 versions (hours)
 make bench-serve                # serve bench/data offline on :8080, trusting X-Forwarded-For
 make bench-load                 # 32 clients for 60 seconds
+go run ./cmd/gdxbench accounts  # tokens and sign-in accounts for write load
+go run ./cmd/gdxbench load -d 30m -publish-rate 2 -login-rate 5   # reads plus uploads and sign-ins
 ```
 
 **What `seed` builds.** Real modules are sampled from `index.golang.org`, in windows spread from 2020 to now, so old and new modules are mixed. Their `go.mod` files come from `proxy.golang.org`, and some get their real source zips. Their paths are remapped under the registry's host (`github.com/spf13/cobra` becomes `gopherdex.localhost/spf13/cobra`), and their requirements are rewritten to match. Synthetic modules fill the set up to the target size. The busiest real owners get their own namespaces, and vanity domains become organizations. Everything is published through `Registry.Publish`, so zip checks, publish checks, search indexing and the dependency graph all run as they do for real uploads. It then records 30 days of downloads, spread by popularity. It writes `bench/data/seed-report.json`, with publish latency, and `modules.tsv` for the load tool.
@@ -373,6 +375,8 @@ make bench-load                 # 32 clients for 60 seconds
 - project pages and tabs;
 - search;
 - the JSON API, badges, feeds and `go-get` lookups.
+
+**Write load.** `gdxbench accounts` puts credentials in the benchmark database, in `bench/data/accounts.tsv` (owner-only file permissions, test data only): API tokens for existing publishers, and fresh accounts with known passwords. With `-publish-rate`, `load` uploads through `/api/upload` at a fixed rate, whether or not the server keeps up, as real traffic arrives. Uploads are new patch releases of existing modules, plus a share (`-new-share`) of brand-new modules. `-login-rate` adds password sign-ins. The report adds a timeline (`-window`) with read and write latency over time, to show drift.
 
 Each client sends a different `X-Forwarded-For` address, so run the server with `-trust-proxy` to load it as many users would, instead of tripping one client's rate limits. The report gives requests per second, errors, and p50/p90/p99/max latency per scenario. `-mix only=search` isolates one scenario, `-rps` fixes the request rate, and `-out` saves JSON. It refuses non-local servers unless given `-i-own-this-server`.
 
@@ -399,7 +403,23 @@ What load testing found, and what fixed it:
 - **Owner pages** listed every module: 5,487 modules, 2 MB of HTML and 0.74 s for the busiest namespace. They now show 60 at a time, and `/api/v1/owners/{name}` returns 100 per page with `total` and `next`.
 - **Name checks at publish** ranked every module by downloads for each new module. On large registries the ranking is reused for 10 minutes.
 
-Still open: feeds for the largest namespaces (p99 1.6 s under load) and very broad searches such as "go" (about 0.2 s).
+**Mixed read and write load**: 100,000 modules, 32 read clients, 2 uploads a second (30% brand-new modules) and 5 sign-ins a second.
+
+| | First 30-minute run | After fixes (10-minute run) |
+|---|---|---|
+| Throughput | 532 req/s | 1,350 req/s (up to 2,100 per minute) |
+| Reads p99, per minute | 545–972 ms | 77–159 ms |
+| Uploads p50 / p99 | 30–35 ms / 324 ms | 45–60 ms / 91–241 ms per minute |
+| Write-ahead log | grew to 956 MB, never checkpointed | stays at 64 MB |
+| Feed p99 | 30 s timeouts | 34 ms |
+
+The after-fixes run is its first 8 minutes: then the laptop running it went to sleep (lid closed). What the mixed runs found:
+- **The write-ahead log never shrank.** SQLite's write-ahead log has only a few reader slots. Dozens of overlapping readers kept some slot pinned to an old position, so no checkpoint could catch up, and the log grew about 36 MB a minute. Only the main database file is memory-mapped, so reads slowed as it grew. The fix has two parts:
+  - The connection pool is capped at one per CPU core. The driver is pure Go and CPU-bound, so more connections added no throughput.
+  - A checkpoint every 5 seconds restarts the log once it passes 64 MB, waiting at most 250 ms for reads in progress. A first try, a truncating checkpoint with the normal 5-second wait, stalled writes for 5 seconds each time and still didn't finish.
+- **Namespace feeds** read and sorted every release of every module in the namespace: 55,000 rows for the largest. Each release now records its namespace, with an index, so the largest feed takes 1.7 ms, down from 166 ms.
+- **Broad searches** ("go" is in most summaries) are ranked in three tiers: path or name matches, then summary, then README. A tier is ranked only when a page reaches it. Totals are counted from the full-text index alone when no filters are set.
+- **The first brand-new module took 3.5 s** because the name check ranked every module by all-time downloads. It now reads the stored 30-day counts, in 1 ms.
 
 **Profiling.** `-debug-addr localhost:6060` serves Go's profiler (`net/http/pprof`) on a loopback address only. For example, `go tool pprof http://localhost:6060/debug/pprof/profile?seconds=20` while `gdxbench load` runs.
 

@@ -64,3 +64,11 @@ func TestSyntheticModuleZip(t *testing.T) {
 		t.Error("pkgName")
 	}
 }
+
+func TestNextPatch(t *testing.T) {
+	for in, want := range map[string]string{"v1.2.3": "v1.2.4", "v0.1.0": "v0.1.1", "v1.3.0-rc.1": "v1.3.0", "v2.0.9": "v2.0.10"} {
+		if got := nextPatch(in); got != want {
+			t.Errorf("nextPatch(%s) = %s, want %s", in, got, want)
+		}
+	}
+}

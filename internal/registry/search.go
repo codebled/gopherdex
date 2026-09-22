@@ -280,11 +280,11 @@ type SearchHit struct {
 // Search finds modules. Words match as prefixes anywhere in the module
 // path, name, summary or README.
 //
-// By relevance, modules whose path, name or summary match come first, then
-// those that match only in their README, each ranked by BM25 with ties
-// going to the more downloaded module. Ranking only the first tier keeps
-// broad queries cheap: "client" might appear in half the READMEs, but in
-// far fewer names.
+// By relevance, modules whose path or name match come first, then those
+// that match in their summary, then those that match only in their README,
+// each tier ranked by BM25 with ties going to the more downloaded module.
+// A tier is only ranked when a page reaches it, which keeps broad queries
+// cheap: "go" appears in most summaries, but in far fewer names.
 func (r *Registry) Search(ctx context.Context, q SearchQuery) ([]SearchHit, int, error) {
 	match := ftsQuery(r.searchText(q.Text))
 	if q.Limit <= 0 || q.Limit > 100 {
@@ -322,7 +322,14 @@ func (r *Registry) Search(ctx context.Context, q SearchQuery) ([]SearchHit, int,
 	const ftsFrom = `module_fts JOIN module_meta mm ON mm.module_id = module_fts.rowid`
 	count := func(fts string) (int, error) {
 		from := `module_meta mm`
-		if fts != "" {
+		switch {
+		case fts != "" && len(filters) == 0:
+			// Every indexed module has its details row, so without filters
+			// the full-text index counts on its own, skipping the join.
+			var n int
+			err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM module_fts WHERE module_fts MATCH ?`, fts).Scan(&n)
+			return n, err
+		case fts != "":
 			from = ftsFrom
 		}
 		cond, a := where(fts)
@@ -347,23 +354,34 @@ func (r *Registry) Search(ctx context.Context, q SearchQuery) ([]SearchHit, int,
 	}
 	if match != "" && (q.Sort == SortRelevance || q.Sort == "") {
 		const byRank = `bm25(module_fts, 10.0, 12.0, 4.0, 1.0), mm.downloads_30d DESC, mm.published_at DESC`
-		head := `{path name synopsis} : (` + match + `)`
-		headTotal, err := count(head)
-		if err != nil {
-			return nil, 0, fmt.Errorf("search: %w", err)
+		named := `{path name} : (` + match + `)`
+		tiers := []string{
+			named,
+			`({synopsis} : (` + match + `)) NOT (` + named + `)`,
+			`(` + match + `) NOT ({path name synopsis} : (` + match + `))`,
 		}
 		hits := []SearchHit{}
-		if q.Offset < headTotal {
-			if hits, err = page(head, byRank, q.Limit, q.Offset); err != nil {
-				return nil, 0, err
+		skip := q.Offset
+		for _, tier := range tiers {
+			if skip > 0 {
+				// Count a tier only to page past it.
+				n, err := count(tier)
+				if err != nil {
+					return nil, 0, fmt.Errorf("search: %w", err)
+				}
+				if skip >= n {
+					skip -= n
+					continue
+				}
 			}
-		}
-		if len(hits) < q.Limit && total > headTotal {
-			tail, err := page(`(`+match+`) NOT (`+head+`)`, byRank, q.Limit-len(hits), max(0, q.Offset-headTotal))
+			more, err := page(tier, byRank, q.Limit-len(hits), skip)
 			if err != nil {
 				return nil, 0, err
 			}
-			hits = append(hits, tail...)
+			hits, skip = append(hits, more...), 0
+			if len(hits) == q.Limit {
+				break
+			}
 		}
 		return hits, total, nil
 	}

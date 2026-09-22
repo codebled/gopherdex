@@ -62,9 +62,10 @@ func (r *Registry) popularNames(ctx context.Context, namespace string, limit int
 	// Freshness is measured in real time, not r.now(): imports and tests
 	// set the registry's clock to when each version was published.
 	if len(r.popular) < 2*limit || time.Since(r.popularAt) >= popularTTL {
-		rows, err := r.DB.QueryContext(ctx, `SELECT m.namespace, m.path FROM modules m LEFT JOIN downloads d ON d.module_id = m.id
-			WHERE m.quarantined_at IS NULL
-			GROUP BY m.id ORDER BY COALESCE(SUM(d.count), 0) DESC, m.id LIMIT ?`, 2*limit)
+		// The stored 30-day counts (indexed) rank the registry without
+		// adding up every download of every module.
+		rows, err := r.DB.QueryContext(ctx, `SELECT namespace, path FROM module_meta
+			ORDER BY downloads_30d DESC, module_id LIMIT ?`, 2*limit)
 		if err != nil {
 			return nil, fmt.Errorf("popular modules: %w", err)
 		}

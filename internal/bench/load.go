@@ -35,6 +35,14 @@ type LoadConfig struct {
 	Timeout     time.Duration
 	Seed        int64
 	Progress    io.Writer
+
+	// Write load, at fixed rates per second alongside the readers. Needs
+	// Accounts, written by PrepareAccounts.
+	Accounts       string
+	PublishRate    float64       // uploads per second
+	NewModuleShare float64       // fraction of uploads that are brand-new modules
+	LoginRate      float64       // password sign-ins per second
+	Window         time.Duration // timeline resolution; 0 means 30s
 }
 
 // DefaultMix weighs scenarios roughly like a package registry's traffic:
@@ -96,9 +104,24 @@ type LoadReport struct {
 	RPS         float64
 	Overall     Latency
 	Scenarios   []ScenarioResult
+	Timeline    []Window
+}
+
+// Window is one slice of the run, to show whether latency drifts over time.
+type Window struct {
+	Start         time.Duration
+	Requests      int
+	Errors        int
+	Reads, Writes Latency
+	WriteRequests int
+}
+
+func isWrite(name string) bool {
+	return name == scenarioPublishVersion || name == scenarioPublishNew || name == scenarioLogin
 }
 
 type sample struct {
+	at     time.Duration // when it finished, from the start of measuring
 	d      time.Duration
 	status string
 	bytes  int64
@@ -126,7 +149,7 @@ func Load(ctx context.Context, cfg LoadConfig) (*LoadReport, error) {
 		l.total += cfg.Mix[n]
 		l.weights = append(l.weights, l.total)
 	}
-	if l.total == 0 {
+	if l.total == 0 && cfg.PublishRate <= 0 && cfg.LoginRate <= 0 {
 		return nil, errors.New("the scenario mix is empty")
 	}
 
@@ -202,12 +225,45 @@ func Load(ctx context.Context, cfg LoadConfig) (*LoadReport, error) {
 				if ctx.Err() != nil && s.failed {
 					return // cut off by the deadline
 				}
-				if time.Now().After(measureFrom) {
+				if now := time.Now(); now.After(measureFrom) {
+					s.at = now.Sub(measureFrom)
 					mine[name] = append(mine[name], s)
 				}
 			}
 		}()
 	}
+	// Write load.
+	var wmu sync.Mutex
+	written := map[string][]sample{}
+	record := func(name string, s sample) {
+		s.at = time.Since(measureFrom)
+		wmu.Lock()
+		written[name] = append(written[name], s)
+		wmu.Unlock()
+	}
+	var writeNames []string
+	if cfg.PublishRate > 0 || cfg.LoginRate > 0 {
+		wr, err := newWriters(l, client, cfg.Accounts)
+		if err != nil {
+			cancel()
+			wg.Wait()
+			return nil, err
+		}
+		share := min(max(cfg.NewModuleShare, 0), 1)
+		rates := map[string]float64{
+			scenarioPublishVersion: cfg.PublishRate * (1 - share),
+			scenarioPublishNew:     cfg.PublishRate * share,
+			scenarioLogin:          cfg.LoginRate,
+		}
+		for _, name := range []string{scenarioLogin, scenarioPublishNew, scenarioPublishVersion} {
+			if rates[name] > 0 {
+				writeNames = append(writeNames, name)
+				wg.Add(1)
+				go func() { defer wg.Done(); wr.run(ctx, name, rates[name], measureFrom, record) }()
+			}
+		}
+	}
+
 	if cfg.Progress != nil {
 		go func() {
 			t := time.NewTicker(5 * time.Second)
@@ -236,7 +292,11 @@ func Load(ctx context.Context, cfg LoadConfig) (*LoadReport, error) {
 			byName[n] = append(byName[n], ss...)
 		}
 	}
-	for _, n := range l.names {
+	for n, ss := range written {
+		byName[n] = ss
+	}
+	names := append(slices.Clone(l.names), writeNames...)
+	for _, n := range names {
 		ss := byName[n]
 		res := ScenarioResult{Name: n, Statuses: map[string]int{}}
 		ds := make([]time.Duration, 0, len(ss))
@@ -257,7 +317,57 @@ func Load(ctx context.Context, cfg LoadConfig) (*LoadReport, error) {
 	}
 	rep.Overall = summarize(all)
 	rep.RPS = float64(rep.Requests) / cfg.Duration.Seconds()
+	rep.Timeline = timeline(byName, cfg.Window, cfg.Duration)
 	return rep, nil
+}
+
+// timeline splits the run into windows, reads and writes apart.
+func timeline(byName map[string][]sample, window, total time.Duration) []Window {
+	if window <= 0 {
+		window = 30 * time.Second
+	}
+	n := int((total + window - 1) / window)
+	reads, writes := make([][]time.Duration, n), make([][]time.Duration, n)
+	out := make([]Window, n)
+	for i := range out {
+		out[i].Start = time.Duration(i) * window
+	}
+	for name, ss := range byName {
+		for _, s := range ss {
+			i := min(max(int(s.at/window), 0), n-1)
+			out[i].Requests++
+			if s.failed {
+				out[i].Errors++
+			}
+			if isWrite(name) {
+				writes[i] = append(writes[i], s.d)
+			} else {
+				reads[i] = append(reads[i], s.d)
+			}
+		}
+	}
+	for i := range out {
+		out[i].Reads, out[i].Writes = summarize(reads[i]), summarize(writes[i])
+		out[i].WriteRequests = len(writes[i])
+	}
+	return out
+}
+
+// WriteTimeline prints the timeline.
+func (rep *LoadReport) WriteTimeline(w io.Writer, window time.Duration) {
+	if len(rep.Timeline) < 2 {
+		return
+	}
+	if window <= 0 {
+		window = 30 * time.Second
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', tabwriter.AlignRight)
+	fmt.Fprintln(tw, "from	req/s	errors	reads p50	reads p99	writes	writes p50	writes p99	")
+	for _, win := range rep.Timeline {
+		fmt.Fprintf(tw, "%s	%.0f	%d	%s	%s	%d	%s	%s	\n", win.Start.Round(time.Second), float64(win.Requests)/window.Seconds(), win.Errors,
+			ms(win.Reads.P50), ms(win.Reads.P99), win.WriteRequests, ms(win.Writes.P50), ms(win.Writes.P99))
+	}
+	tw.Flush()
 }
 
 func (l *loader) pick(r *rand.Rand) string {

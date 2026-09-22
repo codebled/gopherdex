@@ -2,8 +2,10 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,5 +44,55 @@ func TestOpenMigratesOnce(t *testing.T) {
 	}
 	if _, err := db.ExecContext(ctx, `INSERT INTO users (username, email, password_hash, created_at, updated_at) VALUES ('ghost', 'g@example.com', 'x', 0, 0)`); err == nil {
 		t.Fatal("inserting a user without a namespace should violate the foreign key")
+	}
+}
+
+func TestCheckpointRestartsWAL(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "wal.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	insert := func(from, n int) {
+		for i := range n {
+			if _, err := db.ExecContext(ctx, `INSERT INTO namespaces (name, kind, created_at) VALUES (?, 'user', 1)`, fmt.Sprintf("user%d", from+i)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// A small log is only copied, never restarted.
+	insert(0, 50)
+	if frames, restarted, err := CheckpointOnce(ctx, db); err != nil || restarted || frames == 0 {
+		t.Fatalf("small log: %d frames, restarted %v, %v", frames, restarted, err)
+	}
+	// Past the threshold it restarts, even with a reader mid-query.
+	var blob = strings.Repeat("x", 3000)
+	tx, _ := db.BeginTx(ctx, nil)
+	for i := range restartAbove / 2 {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO namespaces (name, kind, created_at) VALUES (?, 'user', 1)`, fmt.Sprintf("big%d-%s", i, blob)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.QueryContext(ctx, `SELECT name FROM namespaces`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows.Next() // reading the latest snapshot doesn't block a restart
+	frames, restarted, err := CheckpointOnce(ctx, db)
+	rows.Close()
+	if err != nil || !restarted || frames <= restartAbove {
+		t.Fatalf("large log: %d frames, restarted %v, %v", frames, restarted, err)
+	}
+	// The connection used for it is back on the normal busy timeout.
+	for range 5 {
+		var ms int
+		db.QueryRowContext(ctx, `PRAGMA busy_timeout`).Scan(&ms)
+		if ms != 5000 {
+			t.Fatalf("busy_timeout = %d after a checkpoint", ms)
+		}
 	}
 }

@@ -315,11 +315,11 @@ func (r *Registry) Publish(ctx context.Context, u Upload) (*Published, error) {
 	}
 	res, err := tx.ExecContext(ctx, `INSERT INTO versions (module_id, version, go_mod, zip_key, zip_size, zip_sha256, h1, go_mod_h1,
 			vcs, repository, commit_hash, ref, published_by, token_id, published_at,
-			synopsis, readme_text, license, go_version, indexed, provenance)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) ON CONFLICT (module_id, version) DO NOTHING`,
+			synopsis, readme_text, license, go_version, indexed, provenance, namespace)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?) ON CONFLICT (module_id, version) DO NOTHING`,
 		moduleID, u.Version, goMod, key, st.Size(), sha, h1, goModH1,
 		vcs, u.Repository, u.Commit, u.Ref, u.User.ID, u.Token.ID, now.Unix(),
-		meta.Synopsis, meta.Readme, meta.License, meta.GoVersion, provenance)
+		meta.Synopsis, meta.Readme, meta.License, meta.GoVersion, provenance, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("publish %s@%s: %w", u.Module, u.Version, err)
 	}

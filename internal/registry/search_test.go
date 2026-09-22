@@ -208,8 +208,8 @@ func TestSearchAtScaleBehaviour(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := paths(hits)
-	if total != 3 || len(got) != 3 || got[2] != host+"/alice/web" {
-		t.Fatalf("README-only matches must come after name and summary matches: %v (total %d)", got, total)
+	if want := []string{host + "/alice/cache", host + "/alice/kv", host + "/alice/web"}; total != 3 || !slices.Equal(got, want) {
+		t.Fatalf("want name, then summary, then README-only matches: %v (total %d)", got, total)
 	}
 	// Paging crosses from the first tier to the README-only tier.
 	hits, _, _ = f.reg.Search(ctx, SearchQuery{Text: "cache", Limit: 1, Offset: 2})

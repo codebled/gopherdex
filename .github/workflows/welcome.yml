@@ -1,0 +1,30 @@
+# Greets people on their first issue or pull request. Runs on
+# pull_request_target to comment on forks' pull requests; it never checks
+# out their code.
+name: Welcome
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_message: |
+            Thanks for opening your first issue here! A maintainer will look at it soon. If it's about a security problem, please close it and follow [SECURITY.md](https://github.com/parthiban-sivakumar/gopherdex/blob/main/SECURITY.md) instead.
+          pr_message: |
+            Thanks for your first pull request to Gopherdex! 🎉
+
+            What happens next:
+            1. The CLA bot will ask you to sign the [Contributor License Agreement](https://github.com/parthiban-sivakumar/gopherdex/blob/main/CLA.md): reply with the sentence it gives you.
+            2. A maintainer approves the CI run (GitHub requires this for first-time contributors), then the checks run: tests, lint, and the rest. `make check` runs the same checks locally.
+            3. A maintainer reviews the change. See [CONTRIBUTING.md](https://github.com/parthiban-sivakumar/gopherdex/blob/main/CONTRIBUTING.md) for what reviewers look for.

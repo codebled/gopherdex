@@ -136,6 +136,7 @@ func (v *Verifier) Verify(ctx context.Context, raw string, dst any) error {
 // audience accepts the aud claim as a string or a list of strings.
 type audience []string
 
+// UnmarshalJSON decodes aud in either form.
 func (a *audience) UnmarshalJSON(b []byte) error {
 	var one string
 	if err := json.Unmarshal(b, &one); err == nil {

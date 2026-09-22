@@ -139,6 +139,7 @@ func (r *Registry) TeamByName(ctx context.Context, org, name string) (*Team, err
 }
 
 func (r *Registry) teams(ctx context.Context, where string, args ...any) ([]Team, error) {
+	//nolint:gosec // constant fragments; callers pass constant where clauses with values as ? args
 	rows, err := r.DB.QueryContext(ctx, `SELECT t.id, o.name, t.name, t.description, t.created_at,
 			(SELECT COUNT(*) FROM team_members WHERE team_id = t.id),
 			(SELECT COUNT(*) FROM team_modules WHERE team_id = t.id)

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -46,21 +47,10 @@ func PrepareAccounts(ctx context.Context, cfg AccountsConfig) (int, error) {
 	var out []Account
 
 	// The busiest real publishers first: they have modules to release.
-	rows, err := db.QueryContext(ctx, `SELECT u.id FROM users u JOIN modules m ON m.created_by = u.id
-		WHERE u.email LIKE '%@bench.invalid' GROUP BY u.id ORDER BY COUNT(*) DESC, u.id LIMIT ?`, cfg.Publishers)
+	ids, err := busiestPublishers(ctx, db, cfg.Publishers)
 	if err != nil {
 		return 0, err
 	}
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		ids = append(ids, id)
-	}
-	rows.Close()
 	for _, id := range ids {
 		u, err := acc.UserByID(ctx, id)
 		if err != nil {
@@ -92,7 +82,7 @@ func PrepareAccounts(ctx context.Context, cfg AccountsConfig) (int, error) {
 		out = append(out, Account{Kind: "user", Username: name, Password: pw, Token: secret})
 	}
 
-	if err := os.MkdirAll(filepath.Dir(cfg.Out), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cfg.Out), 0o750); err != nil {
 		return 0, err
 	}
 	f, err := os.OpenFile(cfg.Out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
@@ -108,6 +98,26 @@ func PrepareAccounts(ctx context.Context, cfg AccountsConfig) (int, error) {
 		return 0, err
 	}
 	return len(out), f.Close()
+}
+
+// busiestPublishers returns up to n seeded users who own the most modules,
+// busiest first: they have modules to release.
+func busiestPublishers(ctx context.Context, db *sql.DB, n int) ([]int64, error) {
+	rows, err := db.QueryContext(ctx, `SELECT u.id FROM users u JOIN modules m ON m.created_by = u.id
+		WHERE u.email LIKE '%@bench.invalid' GROUP BY u.id ORDER BY COUNT(*) DESC, u.id LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func randomSecret() string {

@@ -607,6 +607,7 @@ func (r *Registry) Zip(ctx context.Context, modPath, version string) (io.WriterT
 
 type blobZip struct{ r blob.Reader }
 
+// WriteTo streams the zip to w and closes it, so it can be written once.
 func (z *blobZip) WriteTo(w io.Writer) (int64, error) {
 	defer z.r.Close()
 	return io.Copy(w, z.r)

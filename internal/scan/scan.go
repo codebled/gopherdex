@@ -28,6 +28,7 @@ import (
 // Severity says what the registry does about a finding.
 type Severity string
 
+// The severities, from most to least serious.
 const (
 	Block Severity = "block" // the upload is refused
 	Warn  Severity = "warn"  // published, and sent to administrators for review

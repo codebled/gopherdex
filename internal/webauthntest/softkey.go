@@ -29,18 +29,24 @@ type SoftKey struct {
 	Counter      uint32
 }
 
+// NewSoftKey returns a passkey for the relying party rpID that signs its
+// client data as coming from origin. It holds a fresh key and credential ID,
+// and is bound to a user handle by its first Create.
 func NewSoftKey(t *testing.T, rpID, origin string) *SoftKey {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := make([]byte, 16)
+	id := make([]byte, credentialIDLen)
 	rand.Read(id)
 	return &SoftKey{RPID: rpID, Origin: origin, key: key, id: id}
 }
 
 var b64url = base64.RawURLEncoding
+
+// credentialIDLen is the length of a SoftKey's credential ID in bytes.
+const credentialIDLen = 16
 
 // Flags: user present, user verified, backup eligible and backed up (a
 // synced passkey), and attested credential data included.
@@ -57,7 +63,7 @@ func (k *SoftKey) authData(flags byte) []byte {
 	var buf bytes.Buffer
 	buf.Write(rpHash[:])
 	buf.WriteByte(flags)
-	binary.Write(&buf, binary.BigEndian, k.Counter)
+	buf.Write(binary.BigEndian.AppendUint32(nil, k.Counter))
 	return buf.Bytes()
 }
 
@@ -69,7 +75,8 @@ func (k *SoftKey) clientData(t *testing.T, typ string, challenge []byte) []byte 
 	return data
 }
 
-// create answers navigator.credentials.create().
+// Create answers navigator.credentials.create() with a new credential,
+// remembering the user handle in options for later Gets.
 func (k *SoftKey) Create(t *testing.T, options *protocol.CredentialCreation) []byte {
 	t.Helper()
 	switch h := options.Response.User.ID.(type) {
@@ -85,7 +92,11 @@ func (k *SoftKey) Create(t *testing.T, options *protocol.CredentialCreation) []b
 	default:
 		t.Fatalf("user handle of type %T", h)
 	}
-	x, y := k.key.PublicKey.X.FillBytes(make([]byte, 32)), k.key.PublicKey.Y.FillBytes(make([]byte, 32))
+	pub, err := k.key.PublicKey.Bytes() // 0x04 || X || Y
+	if err != nil {
+		t.Fatal(err)
+	}
+	x, y := pub[1:33], pub[33:65]
 	enc, _ := cbor.CTAP2EncOptions().EncMode()
 	cose, err := enc.Marshal(map[int]any{1: 2, 3: -7, -1: 1, -2: x, -3: y})
 	if err != nil {
@@ -94,7 +105,7 @@ func (k *SoftKey) Create(t *testing.T, options *protocol.CredentialCreation) []b
 	var auth bytes.Buffer
 	auth.Write(k.authData(flagUP | flagUV | flagBE | flagBS | flagAT))
 	auth.Write(make([]byte, 16)) // AAGUID
-	binary.Write(&auth, binary.BigEndian, uint16(len(k.id)))
+	auth.Write(binary.BigEndian.AppendUint16(nil, uint16(credentialIDLen)))
 	auth.Write(k.id)
 	auth.Write(cose)
 	att, err := enc.Marshal(map[string]any{"fmt": "none", "attStmt": map[string]any{}, "authData": auth.Bytes()})
@@ -113,7 +124,8 @@ func (k *SoftKey) Create(t *testing.T, options *protocol.CredentialCreation) []b
 	return resp
 }
 
-// get answers navigator.credentials.get().
+// Get answers navigator.credentials.get(), advancing Counter first as an
+// authenticator does on every use.
 func (k *SoftKey) Get(t *testing.T, options *protocol.CredentialAssertion) []byte {
 	t.Helper()
 	k.Counter++

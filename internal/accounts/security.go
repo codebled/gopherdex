@@ -13,9 +13,15 @@ import (
 )
 
 var (
+	// ErrBadSecondFactor is returned when an authenticator or recovery
+	// code doesn't match.
 	ErrBadSecondFactor = errors.New("that code isn't right")
+	// ErrTooManyAttempts is returned when a pending sign-in, or the account
+	// within the last hour, has had too many wrong codes.
 	ErrTooManyAttempts = errors.New("too many wrong codes; sign in again")
-	ErrWrongPassword   = &FieldError{"current_password", "Your current password isn't right."}
+	// ErrWrongPassword is returned when a sensitive change is confirmed
+	// with the wrong current password.
+	ErrWrongPassword = &FieldError{"current_password", "Your current password isn't right."}
 )
 
 const (
@@ -93,7 +99,7 @@ func (s *Service) RequestPasswordReset(ctx context.Context, email string, c Clie
 	// Sent in the background, so the response takes as long for an address
 	// with an account as for one without: timing can't reveal accounts.
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		if err := s.Mailer.Send(ctx, msg); err != nil {
 			s.log().Error("send password reset email", "user", u.Username, "err", err)
@@ -109,7 +115,9 @@ func (s *Service) CheckResetToken(ctx context.Context, secret string) error {
 		return ErrInvalidToken
 	}
 	var n int
-	s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM password_resets WHERE token_hash = ? AND expires_at > ?`, digest, s.now().Unix()).Scan(&n)
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM password_resets WHERE token_hash = ? AND expires_at > ?`, digest, s.now().Unix()).Scan(&n); err != nil {
+		return fmt.Errorf("check reset token: %w", err)
+	}
 	if n == 0 {
 		return ErrInvalidToken
 	}
@@ -142,7 +150,7 @@ func (s *Service) ResetPassword(ctx context.Context, secret, password string, c 
 	if err := s.setPassword(ctx, u, password, "", "password.reset", c); err != nil {
 		return nil, err
 	}
-	s.notify(u, "Your Gopherdex password was reset", "The password for @"+u.Username+" was just reset using an email link. Every session was signed out and any pending email change was cancelled. API tokens and passkeys still work: review them on your account and security pages.")
+	s.notify(u, "Your Gopherdex password was reset", "The password for @"+u.Username+" was just reset using an email link. Every session was signed out and any pending email change was canceled. API tokens and passkeys still work: review them on your account and security pages.")
 	return u, nil
 }
 
@@ -443,7 +451,10 @@ func (s *Service) CompleteLogin(ctx context.Context, challenge, code string, c C
 		WHERE token_hash = ? AND expires_at > ? AND attempts < ? RETURNING user_id`,
 		digest, s.now().Unix(), maxCodeAttempts).Scan(&userID)
 	if errors.Is(err, sql.ErrNoRows) {
-		res, _ := s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest)
+		res, err := s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest)
+		if err != nil {
+			return "", nil, err
+		}
 		if n, _ := res.RowsAffected(); n > 0 {
 			return "", nil, ErrTooManyAttempts
 		}
@@ -474,7 +485,9 @@ func (s *Service) CompleteLogin(ctx context.Context, challenge, code string, c C
 		}
 		return "", nil, err
 	}
-	s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest)
+	if _, err := s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest); err != nil {
+		s.log().Error("delete login challenge", "user_id", userID, "err", err)
+	}
 	u, err := s.userByID(ctx, userID)
 	if err != nil {
 		return "", nil, err
@@ -547,7 +560,7 @@ func (s *Service) CancelEmailChange(ctx context.Context, u *User, c Client) (boo
 	}
 	n, _ := res.RowsAffected()
 	if n > 0 {
-		s.auditNoTx(ctx, u.ID, "email.change_cancelled", "", c)
+		s.auditNoTx(ctx, u.ID, "email.change_cancelled", "", c) //nolint:misspell // audit action name already stored in audit_log rows
 	}
 	return n > 0, nil
 }

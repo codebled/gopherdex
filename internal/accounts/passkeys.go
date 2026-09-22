@@ -24,7 +24,12 @@ import (
 // code. Accounts with a passkey count as having two-factor authentication.
 
 var (
-	ErrPasskey         = errors.New("that passkey didn't verify; try again")
+	// ErrPasskey is returned when a passkey answer can't be parsed or
+	// doesn't verify: a wrong origin, a stale challenge, an unknown
+	// credential or a counter that went backwards.
+	ErrPasskey = errors.New("that passkey didn't verify; try again")
+	// ErrTooManyPasskeys is returned when an account that already has the
+	// maximum number of passkeys adds another.
 	ErrTooManyPasskeys = &FieldError{"name", "An account can have at most 10 passkeys. Remove one first."}
 )
 
@@ -69,9 +74,19 @@ type waUser struct {
 	creds  []webauthn.Credential
 }
 
-func (w *waUser) WebAuthnID() []byte                         { return w.handle }
-func (w *waUser) WebAuthnName() string                       { return w.u.Username }
-func (w *waUser) WebAuthnDisplayName() string                { return "@" + w.u.Username }
+// WebAuthnID returns the account's random user handle, which authenticators
+// store instead of the account ID so passkeys don't reveal it.
+func (w *waUser) WebAuthnID() []byte { return w.handle }
+
+// WebAuthnName returns the username, which authenticators show when
+// someone picks a passkey.
+func (w *waUser) WebAuthnName() string { return w.u.Username }
+
+// WebAuthnDisplayName returns the username as Gopherdex shows it, with a
+// leading @.
+func (w *waUser) WebAuthnDisplayName() string { return "@" + w.u.Username }
+
+// WebAuthnCredentials returns the account's registered passkeys.
 func (w *waUser) WebAuthnCredentials() []webauthn.Credential { return w.creds }
 
 // loadWAUser loads an account's passkeys, creating its user handle if
@@ -437,7 +452,9 @@ func (s *Service) FinishPasskeySecondFactor(ctx context.Context, challenge, toke
 		return "", nil, err
 	}
 	if digest, ok := digestSecret(challenge); ok {
-		s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest)
+		if _, err := s.DB.ExecContext(ctx, `DELETE FROM login_challenges WHERE token_hash = ?`, digest); err != nil {
+			s.log().Error("delete login challenge", "user", u.Username, "err", err)
+		}
 	}
 	secret, err := s.StartSession(ctx, u, c)
 	if err != nil {

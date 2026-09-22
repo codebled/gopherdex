@@ -38,9 +38,9 @@ var Brand = []Color{
 	{"white", "#FFFFFF"},
 }
 
-// Tints are official colors mixed with white, for quiet surfaces and
+// Tint is an official color mixed with white, for quiet surfaces and
 // borders: a light slate reads as neutral grey, and a pale blue as a
-// selected row. Each is exactly Percent of Brand over white, so the page
+// selected row. It is exactly Percent of Brand over white, so the page
 // still uses nothing but the Go palette.
 type Tint struct {
 	Name    string
@@ -48,6 +48,7 @@ type Tint struct {
 	Percent int
 }
 
+// Tints are the tints the site uses, lightest first within each color.
 var Tints = []Tint{
 	{"slate-50", "slate", 3},      // code blocks, sidebars
 	{"slate-100", "slate", 10},    // hover

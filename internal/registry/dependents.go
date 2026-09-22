@@ -32,24 +32,10 @@ func recordRequires(ctx context.Context, db interface {
 // BackfillRequires records the requirements of versions published before
 // the dependency graph existed.
 func (r *Registry) BackfillRequires(ctx context.Context) error {
-	rows, err := r.DB.QueryContext(ctx, `SELECT id, go_mod FROM versions WHERE requires_indexed = 0`)
+	todo, err := r.unindexedRequires(ctx)
 	if err != nil {
 		return fmt.Errorf("backfill requirements: %w", err)
 	}
-	type pending struct {
-		id    int64
-		goMod []byte
-	}
-	var todo []pending
-	for rows.Next() {
-		var p pending
-		if err := rows.Scan(&p.id, &p.goMod); err != nil {
-			rows.Close()
-			return err
-		}
-		todo = append(todo, p)
-	}
-	rows.Close()
 	for _, p := range todo {
 		if err := recordRequires(ctx, r.DB, p.id, p.goMod); err != nil {
 			return err
@@ -59,6 +45,32 @@ func (r *Registry) BackfillRequires(ctx context.Context) error {
 		r.log().Info("recorded requirements of earlier versions", "versions", len(todo))
 	}
 	return nil
+}
+
+// pendingRequires is a version whose requirements aren't recorded yet.
+type pendingRequires struct {
+	id    int64
+	goMod []byte
+}
+
+// unindexedRequires lists the versions BackfillRequires still has to
+// record. It reads them all first so the rows are closed before the
+// writes start.
+func (r *Registry) unindexedRequires(ctx context.Context) ([]pendingRequires, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT id, go_mod FROM versions WHERE requires_indexed = 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var todo []pendingRequires
+	for rows.Next() {
+		var p pendingRequires
+		if err := rows.Scan(&p.id, &p.goMod); err != nil {
+			return nil, err
+		}
+		todo = append(todo, p)
+	}
+	return todo, rows.Err()
 }
 
 // Dependent is a hosted module whose latest release requires another.

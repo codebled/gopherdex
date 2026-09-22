@@ -33,12 +33,16 @@ type Entry struct {
 	DatabaseSpecific *DatabaseSpecific `json:"database_specific,omitempty"`
 }
 
+// Affected names one vulnerable module and the version ranges and
+// packages the report applies to.
 type Affected struct {
 	Package           Package            `json:"package"`
 	Ranges            []Range            `json:"ranges,omitempty"`
 	EcosystemSpecific *EcosystemSpecific `json:"ecosystem_specific,omitempty"`
 }
 
+// Package identifies the affected module; in the Go ecosystem, Name is
+// the module path.
 type Package struct {
 	Name      string `json:"name"` // module path
 	Ecosystem string `json:"ecosystem"`
@@ -51,11 +55,15 @@ type Range struct {
 	Events []Event `json:"events"`
 }
 
+// Event is one boundary of a Range: the version a vulnerability was
+// introduced in, or the version that fixed it. Exactly one field is set.
 type Event struct {
 	Introduced string `json:"introduced,omitempty"`
 	Fixed      string `json:"fixed,omitempty"`
 }
 
+// EcosystemSpecific holds the Go-specific details of an Affected entry:
+// the vulnerable packages and symbols.
 type EcosystemSpecific struct {
 	Imports []Import `json:"imports,omitempty"`
 }
@@ -67,15 +75,20 @@ type Import struct {
 	Symbols []string `json:"symbols,omitempty"`
 }
 
+// Reference links to more information about a vulnerability, such as an
+// advisory or the commit that fixed it.
 type Reference struct {
 	Type string `json:"type"` // WEB, FIX, REPORT, ADVISORY…
 	URL  string `json:"url"`
 }
 
+// Credit names someone who found or reported a vulnerability.
 type Credit struct {
 	Name string `json:"name"`
 }
 
+// DatabaseSpecific holds fields particular to the database serving the
+// entry: the URL of its human-readable report.
 type DatabaseSpecific struct {
 	URL string `json:"url,omitempty"`
 }
@@ -86,6 +99,8 @@ type ModulesEntry struct {
 	Vulns []ModuleVuln `json:"vulns"`
 }
 
+// ModuleVuln is one vulnerability listed for a module in
+// index/modules.json.
 type ModuleVuln struct {
 	ID       string    `json:"id"`
 	Modified time.Time `json:"modified"`

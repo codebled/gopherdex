@@ -602,6 +602,17 @@ make test   # go test ./...
 make build  # bin/gopherdexd and bin/gopherdex
 ```
 
+## Contributing
+
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md): setup, the checks every pull request must pass, and what reviewers look for. In short:
+
+- **Checks:** `make check` runs what CI runs. That's golangci-lint ([.golangci.yml](.golangci.yml): unchecked errors, security findings, doc comments on everything exported), formatting, trailing whitespace and final newlines, `go mod tidy`, and every test with the race detector. CI also runs `govulncheck`, validates the workflow files, and refuses changes to released migrations.
+- **main is protected:** changes arrive by pull request, with passing checks and a maintainer's review. Pull requests are squash-merged.
+- **First-time contributors:** a welcome message explains the steps; a maintainer approves the first CI run; the [CLA](CLA.md) is signed once, by replying to a bot. Issues labelled `good first issue` are a good place to start.
+- **Security problems** are reported privately: see [SECURITY.md](SECURITY.md).
+- Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+- Maintainers apply the repository's settings with `scripts/github-settings.sh`: branch rules, labels, private vulnerability reporting and Actions defaults.
+
 ## License
 
 Copyright (C) 2026 Parthiban Sivakumar

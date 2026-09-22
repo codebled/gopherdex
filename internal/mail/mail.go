@@ -42,6 +42,8 @@ type LogMailer struct {
 	Log *slog.Logger
 }
 
+// Send logs m at info level, body included, after the same checks
+// SMTPMailer makes, so invalid messages fail in development too.
 func (l LogMailer) Send(_ context.Context, m Message) error {
 	if err := m.validate(); err != nil {
 		return err
@@ -63,6 +65,9 @@ type SMTPMailer struct {
 	Password string
 }
 
+// Send delivers m from s.From. It returns early with ctx's error if ctx
+// ends first; the SMTP exchange itself can't be interrupted, so it finishes
+// in the background.
 func (s SMTPMailer) Send(ctx context.Context, m Message) error {
 	if err := m.validate(); err != nil {
 		return err

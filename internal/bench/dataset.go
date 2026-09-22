@@ -15,6 +15,7 @@ import (
 	"golang.org/x/mod/modfile"
 	xmodule "golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
+	modzip "golang.org/x/mod/zip"
 
 	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
 )
@@ -236,13 +237,13 @@ func goSource(r *rand.Rand, m *Module, version string) string {
 
 // ---- go.mod ----
 
-// rewriteGoMod builds a go.mod for the remapped module from the real one:
+// rewriteGoMod builds a go.mod for the remapped module from the upstream one:
 // the new module path, the real go version, and the real requirements, with
 // modules that are also in the dataset pointed at their new paths so the
 // dependency graph ("used by") is realistic.
-func rewriteGoMod(real []byte, newPath string, remap map[string]string) []byte {
+func rewriteGoMod(upstream []byte, newPath string, remap map[string]string) []byte {
 	goVersion, reqs := "1.21", []string(nil)
-	if f, err := modfile.ParseLax("go.mod", real, nil); err == nil {
+	if f, err := modfile.ParseLax("go.mod", upstream, nil); err == nil {
 		if f.Go != nil {
 			goVersion = f.Go.Version
 		}
@@ -349,8 +350,14 @@ func repack(zw *zip.Writer, m *Module, prefix string, goMod []byte) error {
 		} else {
 			var rc io.ReadCloser
 			if rc, err = zf.Open(); err == nil {
-				_, err = io.Copy(w, rc)
+				// No file in a valid module zip is larger than the whole zip
+				// may be, so this only stops a corrupt or hostile cache entry.
+				var n int64
+				n, err = io.Copy(w, io.LimitReader(rc, modzip.MaxZipFile+1))
 				rc.Close()
+				if err == nil && n > modzip.MaxZipFile {
+					err = fmt.Errorf("%s: %s is larger than a module zip may be", m.zip, zf.Name)
+				}
 			}
 		}
 		if err != nil {

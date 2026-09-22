@@ -213,6 +213,7 @@ func (r *Registry) publisher(ctx context.Context, id int64) (*Publisher, error) 
 }
 
 func (r *Registry) publishers(ctx context.Context, where string, args ...any) ([]Publisher, error) {
+	//nolint:gosec // constant fragments; callers pass constant where clauses with values as ? args
 	rows, err := r.DB.QueryContext(ctx, `SELECT `+publisherColumns+`
 		FROM trusted_publishers p JOIN users u ON u.id = p.created_by WHERE `+where+` ORDER BY p.module_path, p.created_at, p.id`, args...)
 	if err != nil {
@@ -306,6 +307,39 @@ var (
 	shaPattern   = regexp.MustCompile(`^[0-9a-f]{40}$|^[0-9a-f]{64}$`)
 )
 
+// matchGitHubPublisher finds the trusted publisher of modPath for a
+// GitHub workflow run in environment, preferring one tied to that
+// environment over one that isn't. It returns nil if none matches, and
+// the repository owner ID the publisher pinned, if any. The rows are
+// closed before it returns so the caller can keep using tx.
+func matchGitHubPublisher(ctx context.Context, tx *sql.Tx, modPath, repo, workflow, environment string) (*Publisher, string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT `+publisherColumns+`, p.repository_owner_id
+		FROM trusted_publishers p JOIN users u ON u.id = p.created_by
+		WHERE p.module_path = ? AND p.provider = 'github' AND p.repository = ? AND p.workflow = ?
+		ORDER BY p.environment DESC, p.id`, modPath, repo, workflow)
+	if err != nil {
+		return nil, "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p Publisher
+		var pinned string
+		var created int64
+		var lastUsed sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.ModulePath, &p.Provider, &p.Repository, &p.Workflow, &p.Environment, &p.CreatedByID, &p.CreatedBy,
+			&created, &lastUsed, &p.Pending, &pinned); err != nil {
+			return nil, "", err
+		}
+		// A publisher tied to an environment only matches runs in it.
+		// GitHub environment names are case-insensitive.
+		if p.Environment == "" || strings.EqualFold(p.Environment, environment) {
+			p.CreatedAt = time.Unix(created, 0).UTC()
+			return &p, pinned, nil
+		}
+	}
+	return nil, "", rows.Err()
+}
+
 // ExchangeGitHubToken finds the trusted publisher that lets the GitHub
 // Actions run described by claims publish modPath. It consumes the ID
 // token, pins the repository owner's account ID on first use, and returns
@@ -337,36 +371,8 @@ func (r *Registry) ExchangeGitHubToken(ctx context.Context, modPath string, clai
 		return nil, "", reject(http.StatusForbidden, "token_reused", "This ID token was already exchanged. Request a new one.")
 	}
 
-	rows, err := tx.QueryContext(ctx, `SELECT `+publisherColumns+`, p.repository_owner_id
-		FROM trusted_publishers p JOIN users u ON u.id = p.created_by
-		WHERE p.module_path = ? AND p.provider = 'github' AND p.repository = ? AND p.workflow = ?
-		ORDER BY p.environment DESC, p.id`, modPath, repo, workflow)
+	match, ownerID, err := matchGitHubPublisher(ctx, tx, modPath, repo, workflow, claims.Environment)
 	if err != nil {
-		return nil, "", fmt.Errorf("exchange token: %w", err)
-	}
-	var (
-		match   *Publisher
-		ownerID string
-	)
-	for rows.Next() && match == nil {
-		var p Publisher
-		var pinned string
-		var created int64
-		var lastUsed sql.NullInt64
-		if err := rows.Scan(&p.ID, &p.ModulePath, &p.Provider, &p.Repository, &p.Workflow, &p.Environment, &p.CreatedByID, &p.CreatedBy,
-			&created, &lastUsed, &p.Pending, &pinned); err != nil {
-			rows.Close()
-			return nil, "", fmt.Errorf("exchange token: %w", err)
-		}
-		// A publisher tied to an environment only matches runs in it.
-		// GitHub environment names are case-insensitive.
-		if p.Environment == "" || strings.EqualFold(p.Environment, claims.Environment) {
-			p.CreatedAt = time.Unix(created, 0).UTC()
-			match, ownerID = &p, pinned
-		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
 		return nil, "", fmt.Errorf("exchange token: %w", err)
 	}
 	if match == nil {

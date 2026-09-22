@@ -166,6 +166,7 @@ type advisoriesData struct {
 	SiteURL    string
 }
 
+// Feed advertises the security advisories feed on the advisories page.
 func (d advisoriesData) Feed() *feedLink {
 	return &feedLink{"Security advisories on Gopherdex", "/feeds/advisories.atom"}
 }

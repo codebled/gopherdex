@@ -39,6 +39,7 @@ func (m Multi) source(ctx context.Context, modPath string) (Source, error) {
 	return nil, module.ErrNotFound
 }
 
+// Modules lists the modules of every source, sorted, without duplicates.
 func (m Multi) Modules(ctx context.Context) ([]string, error) {
 	var all []string
 	for _, s := range m {
@@ -52,6 +53,7 @@ func (m Multi) Modules(ctx context.Context) ([]string, error) {
 	return slices.Compact(all), nil
 }
 
+// Versions lists the versions of modPath from the source that has it.
 func (m Multi) Versions(ctx context.Context, modPath string) ([]string, error) {
 	s, err := m.source(ctx, modPath)
 	if err != nil {
@@ -60,6 +62,7 @@ func (m Multi) Versions(ctx context.Context, modPath string) ([]string, error) {
 	return s.Versions(ctx, modPath)
 }
 
+// Info describes one version of modPath from the source that has it.
 func (m Multi) Info(ctx context.Context, modPath, version string) (module.Info, error) {
 	s, err := m.source(ctx, modPath)
 	if err != nil {
@@ -68,6 +71,8 @@ func (m Multi) Info(ctx context.Context, modPath, version string) (module.Info, 
 	return s.Info(ctx, modPath, version)
 }
 
+// Latest describes the latest version of modPath from the source that
+// has it.
 func (m Multi) Latest(ctx context.Context, modPath string) (module.Info, error) {
 	s, err := m.source(ctx, modPath)
 	if err != nil {
@@ -76,6 +81,8 @@ func (m Multi) Latest(ctx context.Context, modPath string) (module.Info, error) 
 	return s.Latest(ctx, modPath)
 }
 
+// GoMod returns the go.mod of one version of modPath from the source
+// that has it.
 func (m Multi) GoMod(ctx context.Context, modPath, version string) ([]byte, error) {
 	s, err := m.source(ctx, modPath)
 	if err != nil {
@@ -84,6 +91,8 @@ func (m Multi) GoMod(ctx context.Context, modPath, version string) ([]byte, erro
 	return s.GoMod(ctx, modPath, version)
 }
 
+// Zip returns the module zip of one version of modPath from the source
+// that has it.
 func (m Multi) Zip(ctx context.Context, modPath, version string) (io.WriterTo, error) {
 	s, err := m.source(ctx, modPath)
 	if err != nil {
@@ -92,6 +101,8 @@ func (m Multi) Zip(ctx context.Context, modPath, version string) (io.WriterTo, e
 	return s.Zip(ctx, modPath, version)
 }
 
+// VersionFS exposes the files of one version of modPath from the source
+// that has it. Close the returned io.Closer when done.
 func (m Multi) VersionFS(ctx context.Context, modPath, version string) (fs.FS, io.Closer, error) {
 	s, err := m.source(ctx, modPath)
 	if err != nil {

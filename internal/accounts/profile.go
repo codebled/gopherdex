@@ -185,14 +185,17 @@ func (s *Service) DeleteAccount(ctx context.Context, u *User, password, code str
 	if err != nil {
 		return fmt.Errorf("delete account: %w", err)
 	}
+	defer rows.Close()
 	var orgs []string
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			rows.Close()
-			return err
+			return fmt.Errorf("delete account: %w", err)
 		}
 		orgs = append(orgs, "@"+name)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("delete account: %w", err)
 	}
 	rows.Close()
 	if len(orgs) > 0 {
@@ -218,7 +221,7 @@ func (s *Service) DeleteAccount(ctx context.Context, u *User, password, code str
 	}
 	s.log().Info("account deleted", "user", u.Username)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		err := s.Mailer.Send(ctx, mail.Message{To: u.Email, Subject: "Your Gopherdex account was deleted",
 			Body: fmt.Sprintf("Hi %s,\n\nYour Gopherdex account @%s was deleted. Modules you published stay available, because programs depend on them, and the name @%s can't be registered again.\n\nIf you didn't do this, contact the registry's administrators right away.\n", u.Username, u.Username, u.Username)})

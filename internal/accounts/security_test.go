@@ -211,7 +211,7 @@ func TestSecurityHardening(t *testing.T) {
 	ctx := context.Background()
 	u := verifiedUser(t, s, rec, "alice")
 
-	// A pending email change dies with a password reset, and can be cancelled.
+	// A pending email change dies with a password reset, and can be canceled.
 	if err := s.RequestEmailChange(ctx, u, "attacker@example.com", "correct horse battery", client); err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestSecurityHardening(t *testing.T) {
 		t.Fatalf("cancel: %v, %v", ok, err)
 	}
 	if p, _ := s.PendingEmail(ctx, u); p != "" {
-		t.Fatal("cancelled change still pending")
+		t.Fatal("canceled change still pending")
 	}
 
 	// ConfirmPassword guards sensitive changes.

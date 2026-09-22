@@ -1,0 +1,92 @@
+# golangci-lint configuration: run `make lint`, or see CONTRIBUTING.md.
+# The version is pinned in the Makefile and in CI so everyone gets the same
+# findings.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose       # HTTP response bodies are closed
+    - copyloopvar     # no leftover loop-variable copies
+    - durationcheck   # no duration × duration mistakes
+    - errorlint       # errors compared with errors.Is/As and wrapped with %w
+    - gosec           # security: injection, weak crypto, file permissions, ...
+    - misspell        # spelling in comments and strings
+    - nilerr          # no returning nil after checking an error
+    - noctx           # outbound requests carry a context
+    - nolintlint      # //nolint directives are specific and explained
+    - revive          # style, and doc comments on everything exported
+    - rowserrcheck    # sql.Rows.Err is checked
+    - sqlclosecheck   # sql.Rows and statements are closed
+    - unconvert       # no needless conversions
+    - usestdlibvars   # http.MethodGet over "GET", and the like
+    - wastedassign    # no assignments that are never read
+    - whitespace      # no blank lines at the start or end of blocks
+
+  settings:
+    errcheck:
+      # Idiomatic places where an error can't be acted on.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*os.File).Close
+        - (net/http.ResponseWriter).Write
+        - io.WriteString
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    gosec:
+      excludes:
+        - G104 # unchecked errors: errcheck covers it, with the exclusions above
+    misspell:
+      locale: US
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      rules:
+        - name: exported # every exported name has a doc comment starting with its name
+          arguments: ["checkPrivateReceivers", "disableStutteringCheck"]
+        - name: package-comments
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: errorf
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: var-declaration
+        - name: var-naming
+
+  exclusions:
+    generated: strict
+    presets:
+      - common-false-positives
+      - std-error-handling
+    rules:
+      # Tests may ignore errors from setup steps whose failure the test
+      # would catch anyway, and use fixed file permissions and URLs.
+      - path: _test\.go
+        linters: [errcheck, gosec, bodyclose, noctx]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/parthiban-sivakumar/gopherdex

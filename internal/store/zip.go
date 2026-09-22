@@ -97,6 +97,8 @@ type zipFile struct {
 	size int64
 }
 
+// WriteTo builds the module zip from the directory and streams it to w,
+// returning the number of bytes written.
 func (z *modZip) WriteTo(w io.Writer) (int64, error) {
 	cw := &countingWriter{w: w}
 	zw := zip.NewWriter(cw)

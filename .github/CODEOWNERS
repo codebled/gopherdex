@@ -1,0 +1,8 @@
+# Reviews are requested from these people for changes to the paths below.
+# The last matching rule wins. Add co-maintainers per area as they join.
+*                                   @parthiban-sivakumar
+
+# Security-sensitive areas: every change here needs a maintainer's review.
+/internal/accounts/                 @parthiban-sivakumar
+/internal/database/migrations/      @parthiban-sivakumar
+/.github/                           @parthiban-sivakumar

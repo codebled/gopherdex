@@ -82,7 +82,7 @@ func (s *server) handlePath(w http.ResponseWriter, r *http.Request) {
 	if root != importPath {
 		// A package inside the module: show it in the module's docs.
 		target := s.project.URL(root, version) + "?tab=docs#" + pkgID(root, importPath)
-		http.Redirect(w, r, target, http.StatusFound)
+		http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // target is a site-relative path built from a checked module path
 		return
 	}
 	if hasVersion && module.CheckVersion(version) != nil {
@@ -101,7 +101,9 @@ func (s *server) writeGoImport(w http.ResponseWriter, r *http.Request, root stri
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=300")
-	buf.WriteTo(w)
+	if _, err := buf.WriteTo(w); err != nil {
+		s.log.Warn("write go-import page", "path", r.URL.Path, "err", err)
+	}
 }
 
 // pkgID is the anchor of a package on the docs tab.
@@ -272,7 +274,7 @@ func (s *server) renderProjectFull(w http.ResponseWriter, r *http.Request, modPa
 			data.SourcePath = "go.mod"
 		}
 		if data.Source, err = s.project.Source(r.Context(), modPath, p.Version, data.SourcePath); errors.Is(err, module.ErrNotFound) {
-			data.Source, err = nil, nil
+			data.Source = nil
 		} else if err != nil {
 			s.serverError(w, r, err)
 			return

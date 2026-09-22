@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,7 +24,7 @@ func (e *testEnv) publish(t *testing.T, modPath, version string) {
 	t.Helper()
 	ctx := context.Background()
 	u, err := e.accts.Register(ctx, "alice", "alice@example.com", "correct horse battery", accounts.Client{})
-	if err != nil && err != accounts.ErrUsernameTaken {
+	if err != nil && !errors.Is(err, accounts.ErrUsernameTaken) {
 		t.Fatal(err)
 	}
 	e.accts.DB.ExecContext(ctx, `UPDATE users SET email_verified_at = 1 WHERE username = 'alice'`)

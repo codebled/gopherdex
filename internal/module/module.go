@@ -221,7 +221,7 @@ func validPrerelease(s string) bool {
 		}
 		for i := 0; i < len(id); i++ {
 			c := id[i]
-			if !('0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c == '-') {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && c != '-' {
 				return false
 			}
 		}

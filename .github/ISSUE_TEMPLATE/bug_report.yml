@@ -1,0 +1,38 @@
+name: Bug report
+description: Something doesn't work the way it should.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Security problems don't belong here**: please follow [SECURITY.md](https://github.com/parthiban-sivakumar/gopherdex/blob/main/SECURITY.md) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run gopherdexd -offline
+        2. Publish a module with …
+        3. Open …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `gopherdexd version` or `gopherdex version`, or the commit.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove anything private (tokens, emails) first.
+      render: text

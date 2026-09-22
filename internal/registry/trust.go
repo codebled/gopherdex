@@ -77,7 +77,8 @@ func (r *Registry) Maintainers(ctx context.Context, modPath string) ([]string, e
 
 // ---- Reports ----
 
-// Report categories.
+// ReportCategories are the reasons a user can give when reporting a
+// module, in the order the report form offers them.
 var ReportCategories = []string{"malware", "typosquatting", "spam", "license", "other"}
 
 // Report is a user's report about a module.

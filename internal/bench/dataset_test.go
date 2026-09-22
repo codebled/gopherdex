@@ -34,8 +34,8 @@ func TestNames(t *testing.T) {
 }
 
 func TestRewriteGoMod(t *testing.T) {
-	real := []byte("module github.com/a/web\n\ngo 1.22.1\n\nrequire (\n\tgithub.com/a/log v1.2.0\n\tgolang.org/x/net v0.20.0 // indirect\n)\n\nreplace github.com/a/log => ../log\n")
-	got := string(rewriteGoMod(real, "gdx.test/a/web", map[string]string{"github.com/a/log": "gdx.test/a/log"}))
+	upstream := []byte("module github.com/a/web\n\ngo 1.22.1\n\nrequire (\n\tgithub.com/a/log v1.2.0\n\tgolang.org/x/net v0.20.0 // indirect\n)\n\nreplace github.com/a/log => ../log\n")
+	got := string(rewriteGoMod(upstream, "gdx.test/a/web", map[string]string{"github.com/a/log": "gdx.test/a/log"}))
 	want := "module gdx.test/a/web\n\ngo 1.22.1\n\nrequire (\n\tgdx.test/a/log v1.2.0\n\tgolang.org/x/net v0.20.0 // indirect\n)\n"
 	if got != want {
 		t.Errorf("got\n%s\nwant\n%s", got, want)

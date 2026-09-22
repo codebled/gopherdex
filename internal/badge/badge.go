@@ -16,6 +16,7 @@ import (
 // chosen so the text has enough contrast.
 type Style struct{ BG, FG string }
 
+// The styles badges use. Each one's comment says what it marks.
 var (
 	Neutral = Style{"slate", "white"}       // labels, unknown values
 	Blue    = Style{"gopher-blue", "black"} // versions

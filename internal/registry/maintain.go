@@ -16,10 +16,12 @@ import (
 // Role is what a user may do with a module.
 type Role int
 
+// The roles, from least to most access. Later roles include everything
+// earlier ones may do, so they compare with >=.
 const (
-	RoleNone       Role = iota
-	RoleMaintainer      // publish and yank
-	RoleOwner           // also deprecate and manage who has access
+	RoleNone       Role = iota // no access beyond what everyone has
+	RoleMaintainer             // publish and yank
+	RoleOwner                  // also deprecate and manage who has access
 )
 
 func (r Role) String() string {
@@ -188,7 +190,9 @@ func (r *Registry) setYanked(ctx context.Context, u *accounts.User, modPath, ver
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		var exists int
-		r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM versions WHERE module_id = ? AND version = ?`, moduleID, version).Scan(&exists)
+		if err := r.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM versions WHERE module_id = ? AND version = ?`, moduleID, version).Scan(&exists); err != nil {
+			return fmt.Errorf("update %s@%s: %w", modPath, version, err)
+		}
 		if exists == 0 {
 			return fmt.Errorf("%s@%s: %w", modPath, version, module.ErrNotFound)
 		}
@@ -366,24 +370,10 @@ func (r *Registry) keepAnOwner(ctx context.Context, tx *sql.Tx, moduleID int64, 
 
 // Managed lists the modules u maintains, with their role, sorted by path.
 func (r *Registry) Managed(ctx context.Context, u *accounts.User) ([]ModuleSummary, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT DISTINCT m.namespace FROM modules m
-		LEFT JOIN module_roles mr ON mr.module_id = m.id AND mr.user_id = ? AND mr.accepted_at IS NOT NULL
-		LEFT JOIN organizations o ON o.name = m.namespace
-		LEFT JOIN org_members om ON om.org_id = o.id AND om.user_id = ? AND om.accepted_at IS NOT NULL
-		WHERE mr.user_id IS NOT NULL OR om.user_id IS NOT NULL`, u.ID, u.ID)
+	namespaces, err := r.managedNamespaces(ctx, u)
 	if err != nil {
 		return nil, fmt.Errorf("list managed modules: %w", err)
 	}
-	var namespaces []string
-	for rows.Next() {
-		var ns string
-		if err := rows.Scan(&ns); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		namespaces = append(namespaces, ns)
-	}
-	rows.Close()
 	var out []ModuleSummary
 	for _, ns := range namespaces {
 		mods, err := r.NamespaceModules(ctx, ns)
@@ -397,4 +387,28 @@ func (r *Registry) Managed(ctx context.Context, u *accounts.User) ([]ModuleSumma
 		}
 	}
 	return out, nil
+}
+
+// managedNamespaces lists the namespaces holding modules u maintains,
+// directly or through an organization. The rows are read in full and
+// closed before Managed runs its per-namespace queries.
+func (r *Registry) managedNamespaces(ctx context.Context, u *accounts.User) ([]string, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT DISTINCT m.namespace FROM modules m
+		LEFT JOIN module_roles mr ON mr.module_id = m.id AND mr.user_id = ? AND mr.accepted_at IS NOT NULL
+		LEFT JOIN organizations o ON o.name = m.namespace
+		LEFT JOIN org_members om ON om.org_id = o.id AND om.user_id = ? AND om.accepted_at IS NOT NULL
+		WHERE mr.user_id IS NOT NULL OR om.user_id IS NOT NULL`, u.ID, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var namespaces []string
+	for rows.Next() {
+		var ns string
+		if err := rows.Scan(&ns); err != nil {
+			return nil, err
+		}
+		namespaces = append(namespaces, ns)
+	}
+	return namespaces, rows.Err()
 }

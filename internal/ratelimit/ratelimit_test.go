@@ -11,8 +11,10 @@ func TestLimiter(t *testing.T) {
 	l := New(2, time.Minute)
 	l.now = func() time.Time { return now }
 
-	if !l.Allow("a") || !l.Allow("a") {
-		t.Fatal("first two events should be allowed")
+	for range 2 {
+		if !l.Allow("a") {
+			t.Fatal("first two events should be allowed")
+		}
 	}
 	if l.Allow("a") {
 		t.Fatal("third event in the window should be blocked")

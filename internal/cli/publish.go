@@ -81,8 +81,11 @@ func publish(ctx context.Context, args []string, env Env) error {
 		return fmt.Errorf("tag %s has no %sgo.mod. Commit go.mod before tagging", tag, tagPrefix)
 	}
 	mf, err := modfile.ParseLax("go.mod", []byte(goModAtTag+"\n"), nil)
-	if err != nil || mf.Module == nil {
-		return fmt.Errorf("go.mod at tag %s can't be parsed: %v", tag, err)
+	if err != nil {
+		return fmt.Errorf("go.mod at tag %s can't be parsed: %w", tag, err)
+	}
+	if mf.Module == nil {
+		return fmt.Errorf("go.mod at tag %s has no module line", tag)
 	}
 	modPath := mf.Module.Mod.Path
 	_, pathMajor, _ := module.SplitPathVersion(modPath)
@@ -271,7 +274,7 @@ func git(ctx context.Context, dir string, args ...string) (string, error) {
 		if errors.Is(err, exec.ErrNotFound) {
 			return "", errors.New("git isn't installed or isn't on PATH")
 		}
-		return "", fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return strings.TrimSpace(stdout.String()), nil
 }

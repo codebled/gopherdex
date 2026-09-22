@@ -60,6 +60,7 @@ type Index interface {
 // Origin says where a module's data comes from.
 type Origin string
 
+// The origins a search result can have.
 const (
 	Hosted Origin = "hosted" // served by this registry
 	Public Origin = "public" // proxy.golang.org / pkg.go.dev
@@ -192,8 +193,9 @@ func (s *Service) log() *slog.Logger {
 // Scope limits a search to one source.
 type Scope string
 
+// The scopes a search can have. ScopeAll searches both sources.
 const (
-	ScopeAll    Scope = ""
+	ScopeAll    Scope = ""       // this registry, then pkg.go.dev
 	ScopeHosted Scope = "hosted" // this registry only; fast
 	ScopePublic Scope = "public" // pkg.go.dev only; can take seconds
 )

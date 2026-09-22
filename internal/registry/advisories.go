@@ -403,7 +403,7 @@ func (r *Registry) Advisory(ctx context.Context, id string) (*Advisory, error) {
 }
 
 func (r *Registry) advisories(ctx context.Context, where string, args ...any) ([]*Advisory, error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT `+advisoryColumns+advisoryFrom+where+` ORDER BY a.published_at DESC, a.id DESC`, args...)
+	rows, err := r.DB.QueryContext(ctx, `SELECT `+advisoryColumns+advisoryFrom+where+` ORDER BY a.published_at DESC, a.id DESC`, args...) //nolint:gosec // constant fragments; callers pass constant where clauses with values as ? args
 	if err != nil {
 		return nil, fmt.Errorf("list advisories: %w", err)
 	}

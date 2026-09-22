@@ -23,12 +23,12 @@ import (
 const challengeCookie = "gopherdex_2fa"
 
 func (s *server) setChallenge(w http.ResponseWriter, secret string) {
-	http.SetCookie(w, &http.Cookie{Name: challengeCookie, Value: secret, Path: "/login/2fa", MaxAge: 300,
+	http.SetCookie(w, &http.Cookie{Name: challengeCookie, Value: secret, Path: "/login/2fa", MaxAge: 300, //nolint:gosec // Secure is off only for plain-HTTP local development
 		HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteLaxMode})
 }
 
 func (s *server) clearChallenge(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: challengeCookie, Value: "", Path: "/login/2fa", MaxAge: -1,
+	http.SetCookie(w, &http.Cookie{Name: challengeCookie, Value: "", Path: "/login/2fa", MaxAge: -1, //nolint:gosec // Secure is off only for plain-HTTP local development
 		HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteLaxMode})
 }
 
@@ -107,7 +107,7 @@ func (s *server) handleReset(w http.ResponseWriter, r *http.Request) {
 	s.clearSession(w)
 	s.render(w, r, http.StatusOK, "message", "Password changed", messageData{
 		Kicker: "Password reset", Heading: "Your password is changed.",
-		Body:      "You've been signed out everywhere, and any pending email change was cancelled. Sign in with your new password.",
+		Body:      "You've been signed out everywhere, and any pending email change was canceled. Sign in with your new password.",
 		ActionURL: "/login", ActionLabel: "Sign in",
 	})
 }
@@ -189,7 +189,7 @@ type securityData struct {
 	AppEnabled    bool // an authenticator app is set up
 }
 
-var securityNotices = map[string]string{
+var securityNotices = map[string]string{ //nolint:gosec // notice texts that mention passwords, not credentials
 	"password":        "Password changed. Other sessions were signed out.",
 	"sessions":        "Signed out of every other session.",
 	"2fa-off":         "Two-factor authentication is off.",
@@ -235,6 +235,7 @@ func (s *server) renderSecurity(w http.ResponseWriter, r *http.Request, status i
 			return
 		}
 		code.Scale = 6
+		//nolint:gosec // a base64 PNG data URL we encode ourselves, not user input
 		data.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG()))
 	}
 	if data.Sessions, err = s.accounts.SessionCount(ctx, u.ID); err != nil {
@@ -608,5 +609,5 @@ func (s *server) handleCancelEmailChange(w http.ResponseWriter, r *http.Request)
 		s.serverError(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/account?done=email-cancelled", http.StatusSeeOther)
+	http.Redirect(w, r, "/account?done=email-canceled", http.StatusSeeOther)
 }

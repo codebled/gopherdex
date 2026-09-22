@@ -30,7 +30,9 @@ func loadAssetVersions() {
 		if err != nil {
 			return
 		}
-		fs.WalkDir(static, ".", func(p string, d fs.DirEntry, err error) error {
+		// The files are embedded, so reading them does not fail in practice; if
+		// it did, the remaining assets would be served without a version.
+		_ = fs.WalkDir(static, ".", func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
 			}

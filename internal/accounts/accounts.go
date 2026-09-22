@@ -22,16 +22,33 @@ import (
 )
 
 var (
-	ErrUsernameTaken      = &FieldError{"username", "That username is taken."}
-	ErrEmailTaken         = &FieldError{"email", "An account already uses that email address. Sign in instead."}
+	// ErrUsernameTaken is returned when an account or organization already
+	// has the name.
+	ErrUsernameTaken = &FieldError{"username", "That username is taken."}
+	// ErrEmailTaken is returned when another account already uses the
+	// email address.
+	ErrEmailTaken = &FieldError{"email", "An account already uses that email address. Sign in instead."}
+	// ErrInvalidCredentials is returned when a sign-in names an unknown
+	// account or the wrong password. It doesn't say which, so it can't be
+	// used to find out whether an account exists.
 	ErrInvalidCredentials = errors.New("incorrect username, email or password")
-	ErrEmailNotVerified   = errors.New("email address is not verified")
-	ErrInvalidToken       = errors.New("invalid or expired token")
-	ErrNotFound           = errors.New("not found")
-	ErrTooManyTokens      = errors.New("too many active API tokens")
+	// ErrEmailNotVerified is returned when an account whose email address
+	// isn't verified yet tries something that needs it, like creating an
+	// API token or adding a passkey.
+	ErrEmailNotVerified = errors.New("email address is not verified")
+	// ErrInvalidToken is returned for a session, link or API token that is
+	// unknown, expired, revoked or already used.
+	ErrInvalidToken = errors.New("invalid or expired token")
+	// ErrNotFound is returned when a looked-up account or record doesn't
+	// exist.
+	ErrNotFound = errors.New("not found")
+	// ErrTooManyTokens is returned by CreateToken when an account already
+	// has the maximum number of active API tokens.
+	ErrTooManyTokens = errors.New("too many active API tokens")
 )
 
 const (
+	// SessionTTL is how long a browser session lasts after sign-in.
 	SessionTTL      = 14 * 24 * time.Hour
 	verificationTTL = 24 * time.Hour
 	maxActiveTokens = 20
@@ -176,7 +193,9 @@ func (s *Service) Login(ctx context.Context, login, password string, c Client) (
 		FROM users WHERE username = ? OR email = ?`, login, login).
 		Scan(&u.ID, &u.Username, &u.Email, &hash, &verified, &twoFactor, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		checkPassword(password, dummyHash) // same work as a real check
+		// Same work as a real check. The result is discarded: the account
+		// doesn't exist, so the sign-in fails either way.
+		_, _ = checkPassword(password, dummyHash)
 		s.auditNoTx(ctx, 0, "login.failed", "unknown account", c)
 		return nil, ErrInvalidCredentials
 	}
@@ -411,12 +430,12 @@ func (s *Service) CreateToken(ctx context.Context, u *User, name string, ttl tim
 		return "", nil, ErrTooManyTokens
 	}
 
-	secret, digest, err := newSecret()
+	secret, _, err := newSecret()
 	if err != nil {
 		return "", nil, err
 	}
 	secret = TokenPrefix + secret
-	digest = sha256Sum(secret)
+	digest := sha256Sum(secret)
 	if scope == "" {
 		scope = UserScope(u)
 	}

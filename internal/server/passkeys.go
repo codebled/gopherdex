@@ -18,13 +18,13 @@ import (
 const ceremonyCookie = "gopherdex_webauthn"
 
 func (s *server) setCeremony(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{Name: ceremonyCookie, Value: token, Path: "/", MaxAge: 300,
+	http.SetCookie(w, &http.Cookie{Name: ceremonyCookie, Value: token, Path: "/", MaxAge: 300, //nolint:gosec // Secure is off only for plain-HTTP local development
 		HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteStrictMode})
 }
 
 func (s *server) takeCeremony(w http.ResponseWriter, r *http.Request) string {
 	c, err := r.Cookie(ceremonyCookie)
-	http.SetCookie(w, &http.Cookie{Name: ceremonyCookie, Value: "", Path: "/", MaxAge: -1,
+	http.SetCookie(w, &http.Cookie{Name: ceremonyCookie, Value: "", Path: "/", MaxAge: -1, //nolint:gosec // Secure is off only for plain-HTTP local development
 		HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteStrictMode})
 	if err != nil {
 		return ""
@@ -68,7 +68,9 @@ func (s *server) handlePasskeyRegisterOptions(w http.ResponseWriter, r *http.Req
 	var body struct {
 		Password string `json:"password"`
 	}
-	json.NewDecoder(limitedBody(r)).Decode(&body)
+	// A missing or malformed body leaves the password empty, which
+	// checkPassword rejects.
+	_ = json.NewDecoder(limitedBody(r)).Decode(&body)
 	if msg := s.checkPassword(r, u, body.Password); msg != "" {
 		writeJSON(w, http.StatusUnprocessableEntity, apiError{msg})
 		return

@@ -35,14 +35,19 @@ func New(t testing.TB) *Issuer {
 	t.Cleanup(srv.Close)
 	iss.URL = srv.URL
 	mux.HandleFunc("GET /.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]string{"issuer": iss.URL, "jwks_uri": iss.URL + "/.well-known/jwks"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"issuer": iss.URL, "jwks_uri": iss.URL + "/.well-known/jwks"}); err != nil {
+			t.Errorf("oidctest: write discovery document: %v", err)
+		}
 	})
 	mux.HandleFunc("GET /.well-known/jwks", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
+		err := json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]string{{
 			"kty": "RSA", "use": "sig", "alg": "RS256", "kid": iss.Kid,
 			"n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
 			"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
 		}}})
+		if err != nil {
+			t.Errorf("oidctest: write key set: %v", err)
+		}
 	})
 	return iss
 }

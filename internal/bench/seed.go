@@ -75,8 +75,10 @@ type Phase struct {
 	Duration time.Duration
 }
 
+// nopMailer drops mail: seeded and load-test accounts have no real inboxes.
 type nopMailer struct{}
 
+// Send discards the message and reports success.
 func (nopMailer) Send(context.Context, mail.Message) error { return nil }
 
 // Seed builds the dataset described by cfg.
@@ -85,14 +87,14 @@ func Seed(ctx context.Context, cfg SeedConfig) (*SeedReport, error) {
 		return nil, fmt.Errorf("%s already exists; seeding needs a new database (delete it or choose another -db)", cfg.DB)
 	}
 	for _, dir := range []string{cfg.Out, filepath.Dir(cfg.DB), cfg.Upstream.Cache} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			return nil, err
 		}
 	}
 	if err := fenceOffFromGo(filepath.Dir(cfg.Upstream.Cache)); err != nil {
 		return nil, err
 	}
-	s := &seeder{cfg: cfg, rnd: mrand.New(mrand.NewPCG(cfg.Seed, 1)), rep: &SeedReport{Rejected: map[string]int{}}}
+	s := &seeder{cfg: cfg, rnd: mrand.New(mrand.NewPCG(cfg.Seed, 1)), rep: &SeedReport{Rejected: map[string]int{}}} //nolint:gosec // seeded so the dataset is reproducible; it generates test data, never secrets
 	steps := []struct {
 		name string
 		run  func(context.Context) error
@@ -562,8 +564,12 @@ func (s *seeder) accounts(ctx context.Context) error {
 		for i := range 2 {
 			m := s.nsOrder[(len(org)*7+i*13)%len(s.users)]
 			if m != ownerName {
-				s.reg.SetOrgMember(ctx, s.users[ownerName], org, m, "member", c)
-				s.reg.AcceptInvitation(ctx, s.users[m], registry.InviteOrg, org, c)
+				// Members are decoration; a failure here shouldn't stop the seed.
+				if err := s.reg.SetOrgMember(ctx, s.users[ownerName], org, m, "member", c); err != nil {
+					s.logf("   add %s to %s: %v", m, org, err)
+				} else if err := s.reg.AcceptInvitation(ctx, s.users[m], registry.InviteOrg, org, c); err != nil {
+					s.logf("   %s accept %s: %v", m, org, err)
+				}
 			}
 		}
 	}
@@ -594,7 +600,7 @@ func (s *seeder) publish(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r := mrand.New(mrand.NewPCG(s.cfg.Seed, uint64(w)+100))
+			r := mrand.New(mrand.NewPCG(s.cfg.Seed, uint64(w)+100)) //nolint:gosec // seeded so the dataset is reproducible; test data, never secrets
 			for m := range jobs {
 				b := built{m: m}
 				for _, v := range m.Versions {
@@ -787,7 +793,8 @@ func fileSize(p string) int64 {
 }
 
 func dirSize(dir string) (n int64) {
-	filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+	// The callback skips unreadable entries and never fails, so neither does the walk.
+	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
 			if info, err := d.Info(); err == nil {
 				n += info.Size()
@@ -806,5 +813,5 @@ func fenceOffFromGo(dir string) error {
 	if _, err := os.Stat(p); err == nil {
 		return nil
 	}
-	return os.WriteFile(p, []byte("// Benchmark data from gdxbench; this file keeps go ./... out of it.\nmodule gdxbench.invalid/data\n"), 0o644)
+	return os.WriteFile(p, []byte("// Benchmark data from gdxbench; this file keeps go ./... out of it.\nmodule gdxbench.invalid/data\n"), 0o600)
 }

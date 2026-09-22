@@ -63,9 +63,15 @@ func main() {
 func healthcheckCommand() error {
 	fs := flag.NewFlagSet("healthcheck", flag.ExitOnError)
 	target := fs.String("url", "http://localhost:8080/healthz", "health endpoint to check")
-	fs.Parse(os.Args[2:])
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return err
+	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(*target)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, *target, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -88,7 +94,9 @@ func blobsCommand() error {
 	from := fs.String("from", "data/blobs", "store to copy from")
 	to := fs.String("to", "", "store to copy to")
 	maxSize := fs.Int64("max-upload", registry.DefaultMaxZipSize*2, "largest blob to copy, in bytes")
-	fs.Parse(os.Args[3:])
+	if err := fs.Parse(os.Args[3:]); err != nil {
+		return err
+	}
 	if *to == "" || *to == *from {
 		return errors.New("give a different -to store")
 	}
@@ -98,12 +106,13 @@ func blobsCommand() error {
 	if err != nil {
 		return err
 	}
-	defer closeSrc()
+	// Closing a store only releases its directory handle; nothing is lost if it fails.
+	defer func() { _ = closeSrc() }()
 	dst, closeDst, err := blob.Open(*to, os.Getenv)
 	if err != nil {
 		return err
 	}
-	defer closeDst()
+	defer func() { _ = closeDst() }()
 	copied, skipped, err := blob.Copy(ctx, dst, src, *maxSize)
 	fmt.Printf("Copied %d blobs, skipped %d already at %s.\n", copied, skipped, *to)
 	return err
@@ -115,7 +124,9 @@ func backupCommand() error {
 	fs := flag.NewFlagSet("backup", flag.ExitOnError)
 	dbPath := fs.String("db", "data/gopherdex.db", "database to back up")
 	out := fs.String("out", "", "file to write (must not exist); default gopherdex-<time>.db in the current directory")
-	fs.Parse(os.Args[2:])
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return err
+	}
 	if *out == "" {
 		*out = "gopherdex-" + time.Now().UTC().Format("20060102T150405Z") + ".db"
 	}
@@ -208,7 +219,8 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer closeBlobs()
+	// Closing the store only releases its directory handle; nothing is lost if it fails.
+	defer func() { _ = closeBlobs() }()
 	if s3, ok := blobs.(*blob.S3); ok {
 		checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		err := s3.Check(checkCtx)
@@ -338,7 +350,10 @@ func run() error {
 		}
 		go func() {
 			log.Info("profiling on", "addr", "http://"+*debugAddr+"/debug/pprof/")
-			if err := http.ListenAndServe(*debugAddr, debugMux()); err != nil {
+			// No write timeout: /debug/pprof/profile and /trace stream for as
+			// long as the ?seconds= parameter asks.
+			dsrv := &http.Server{Addr: *debugAddr, Handler: debugMux(), ReadHeaderTimeout: 10 * time.Second}
+			if err := dsrv.ListenAndServe(); err != nil {
 				log.Error("profiling server", "err", err)
 			}
 		}()

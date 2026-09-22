@@ -37,9 +37,9 @@ const (
 	maxKeys = 200000
 )
 
-// New returns a Limiter allowing max events per window.
-func New(max int, window time.Duration) *Limiter {
-	return &Limiter{Max: max, Window: window, buckets: map[string]bucket{}, now: time.Now}
+// New returns a Limiter allowing limit events per window.
+func New(limit int, window time.Duration) *Limiter {
+	return &Limiter{Max: limit, Window: window, buckets: map[string]bucket{}, now: time.Now}
 }
 
 // Allow records an event for key and reports whether it is within the limit.

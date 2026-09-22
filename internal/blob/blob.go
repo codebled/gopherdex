@@ -19,9 +19,13 @@ import (
 	"strings"
 )
 
+// Errors stores return, wrapped with the key; test for them with errors.Is.
 var (
-	ErrExists   = errors.New("blob already exists")
+	// ErrExists means Put found a blob already stored under the key.
+	ErrExists = errors.New("blob already exists")
+	// ErrNotFound means Open found no blob under the key.
 	ErrNotFound = errors.New("blob not found")
+	// ErrTooLarge means Put's reader held more than maxSize bytes.
 	ErrTooLarge = errors.New("blob is too large")
 )
 
@@ -51,6 +55,7 @@ type fileReader struct {
 	size int64
 }
 
+// Size returns the blob's length in bytes.
 func (f fileReader) Size() int64 { return f.size }
 
 // FS stores blobs as files under a directory.
@@ -84,7 +89,7 @@ func checkKey(key string) error {
 		}
 	}
 	for _, r := range key {
-		if !('a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || strings.ContainsRune("/._-!@+~", r)) {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && !strings.ContainsRune("/._-!@+~", r) {
 			return fmt.Errorf("invalid blob key %q: character %q", key, r)
 		}
 	}
@@ -114,7 +119,9 @@ func (s *FS) Put(ctx context.Context, key string, r io.Reader, maxSize int64) (I
 	if err != nil {
 		return Info{}, fmt.Errorf("create temporary file for %s: %w", key, err)
 	}
-	defer s.root.Remove(tmp)
+	// Once linked into place the temporary name is redundant; failing to
+	// remove it leaves only a stray dot-file that checkKey never exposes.
+	defer func() { _ = s.root.Remove(tmp) }()
 
 	h := sha256.New()
 	n, err := io.Copy(io.MultiWriter(f, h), &ctxReader{ctx: ctx, r: io.LimitReader(r, maxSize+1)})

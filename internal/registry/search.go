@@ -101,6 +101,35 @@ func GoNum(v string) int {
 	return ma*1000 + mi
 }
 
+// indexedVersion is what the search index keeps of one release.
+type indexedVersion struct {
+	version, synopsis, readme, license, goVersion string
+	published                                     int64
+}
+
+// indexedVersions loads the unyanked releases of a module for reindex,
+// keyed by version, along with the list of versions. The rows are closed
+// before reindex opens its transaction.
+func (r *Registry) indexedVersions(ctx context.Context, moduleID int64) (map[string]indexedVersion, []string, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT version, published_at, synopsis, readme_text, license, go_version
+		FROM versions WHERE module_id = ? AND yanked_at IS NULL`, moduleID)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	byVersion := map[string]indexedVersion{}
+	var versions []string
+	for rows.Next() {
+		var v indexedVersion
+		if err := rows.Scan(&v.version, &v.published, &v.synopsis, &v.readme, &v.license, &v.goVersion); err != nil {
+			return nil, nil, err
+		}
+		byVersion[v.version] = v
+		versions = append(versions, v.version)
+	}
+	return byVersion, versions, rows.Err()
+}
+
 // reindex refreshes a module's search entry from its latest installable
 // version. Call it after anything that changes what search should show.
 func (r *Registry) reindex(ctx context.Context, moduleID int64) error {
@@ -111,27 +140,10 @@ func (r *Registry) reindex(ctx context.Context, moduleID int64) error {
 		Scan(&modPath, &namespace, &created, &deprecation, &quarantined); err != nil {
 		return fmt.Errorf("reindex module %d: %w", moduleID, err)
 	}
-	rows, err := r.DB.QueryContext(ctx, `SELECT version, published_at, synopsis, readme_text, license, go_version
-		FROM versions WHERE module_id = ? AND yanked_at IS NULL`, moduleID)
+	byVersion, versions, err := r.indexedVersions(ctx, moduleID)
 	if err != nil {
 		return fmt.Errorf("reindex %s: %w", modPath, err)
 	}
-	type row struct {
-		version, synopsis, readme, license, goVersion string
-		published                                     int64
-	}
-	byVersion := map[string]row{}
-	var versions []string
-	for rows.Next() {
-		var v row
-		if err := rows.Scan(&v.version, &v.published, &v.synopsis, &v.readme, &v.license, &v.goVersion); err != nil {
-			rows.Close()
-			return err
-		}
-		byVersion[v.version] = v
-		versions = append(versions, v.version)
-	}
-	rows.Close()
 
 	tx, err := r.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -185,24 +197,10 @@ func (r *Registry) reindexPath(ctx context.Context, modPath string) {
 // existed, then rebuilds the search index. It is safe to run on every
 // start-up; work already done is skipped.
 func (r *Registry) Backfill(ctx context.Context) error {
-	type pending struct {
-		id               int64
-		modPath, version string
-	}
-	rows, err := r.DB.QueryContext(ctx, `SELECT v.id, m.path, v.version FROM versions v JOIN modules m ON m.id = v.module_id WHERE v.indexed = 0`)
+	todo, err := r.unindexedVersions(ctx)
 	if err != nil {
 		return fmt.Errorf("backfill: %w", err)
 	}
-	var todo []pending
-	for rows.Next() {
-		var p pending
-		if err := rows.Scan(&p.id, &p.modPath, &p.version); err != nil {
-			rows.Close()
-			return err
-		}
-		todo = append(todo, p)
-	}
-	rows.Close()
 
 	for _, p := range todo {
 		if err := ctx.Err(); err != nil {
@@ -223,17 +221,10 @@ func (r *Registry) Backfill(ctx context.Context) error {
 	}
 
 	// Rebuild entries for every module missing from the index.
-	ids, err := r.DB.QueryContext(ctx, `SELECT m.id FROM modules m WHERE NOT EXISTS (SELECT 1 FROM module_meta mm WHERE mm.module_id = m.id)`)
+	missing, err := r.unindexedModules(ctx)
 	if err != nil {
 		return err
 	}
-	var missing []int64
-	for ids.Next() {
-		var id int64
-		ids.Scan(&id)
-		missing = append(missing, id)
-	}
-	ids.Close()
 	for _, id := range missing {
 		if err := r.reindex(ctx, id); err != nil {
 			return err
@@ -245,16 +236,63 @@ func (r *Registry) Backfill(ctx context.Context) error {
 	return nil
 }
 
+// pendingIndex is a version whose search details aren't extracted yet.
+type pendingIndex struct {
+	id               int64
+	modPath, version string
+}
+
+// unindexedVersions lists the versions Backfill still has to extract
+// search details from, read in full so the rows are closed before it
+// writes.
+func (r *Registry) unindexedVersions(ctx context.Context) ([]pendingIndex, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT v.id, m.path, v.version FROM versions v JOIN modules m ON m.id = v.module_id WHERE v.indexed = 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var todo []pendingIndex
+	for rows.Next() {
+		var p pendingIndex
+		if err := rows.Scan(&p.id, &p.modPath, &p.version); err != nil {
+			return nil, err
+		}
+		todo = append(todo, p)
+	}
+	return todo, rows.Err()
+}
+
+// unindexedModules lists the modules with no search index entry, read in
+// full so Backfill can reindex them without holding the rows open.
+func (r *Registry) unindexedModules(ctx context.Context) ([]int64, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT m.id FROM modules m WHERE NOT EXISTS (SELECT 1 FROM module_meta mm WHERE mm.module_id = m.id)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var missing []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		missing = append(missing, id)
+	}
+	return missing, rows.Err()
+}
+
 // ---- Search ----
 
 // Sort orders search results.
 type Sort string
 
+// The search orders. Without search text, relevance falls back to
+// SortUpdated.
 const (
-	SortRelevance Sort = "relevance"
-	SortDownloads Sort = "downloads"
-	SortUpdated   Sort = "updated"
-	SortNew       Sort = "new"
+	SortRelevance Sort = "relevance" // best text match first: name, then synopsis, then the rest
+	SortDownloads Sort = "downloads" // most downloads in the last 30 days first
+	SortUpdated   Sort = "updated"   // most recent release first
+	SortNew       Sort = "new"       // most recently created module first
 )
 
 // SearchQuery describes a search. All filters are optional.
@@ -459,22 +497,10 @@ type Facet struct {
 
 // Facets lists the licenses and Go versions present, for search filters.
 func (r *Registry) Facets(ctx context.Context) (licenses, goVersions []Facet, err error) {
-	rows, err := r.DB.QueryContext(ctx, `SELECT license FROM module_meta WHERE license != ''`)
+	counts, err := r.licenseCounts(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("facets: %w", err)
 	}
-	counts := map[string]int{}
-	for rows.Next() {
-		var l string
-		if err := rows.Scan(&l); err != nil {
-			rows.Close()
-			return nil, nil, err
-		}
-		for _, id := range strings.Split(l, ",") {
-			counts[id]++
-		}
-	}
-	rows.Close()
 	for v, n := range counts {
 		licenses = append(licenses, Facet{v, n})
 	}
@@ -485,7 +511,7 @@ func (r *Registry) Facets(ctx context.Context) (licenses, goVersions []Facet, er
 		return strings.Compare(a.Value, b.Value)
 	})
 
-	rows, err = r.DB.QueryContext(ctx, `SELECT go_num, COUNT(*) FROM module_meta WHERE go_num > 0 GROUP BY go_num ORDER BY go_num DESC`)
+	rows, err := r.DB.QueryContext(ctx, `SELECT go_num, COUNT(*) FROM module_meta WHERE go_num > 0 GROUP BY go_num ORDER BY go_num DESC`)
 	if err != nil {
 		return nil, nil, fmt.Errorf("facets: %w", err)
 	}
@@ -498,4 +524,25 @@ func (r *Registry) Facets(ctx context.Context) (licenses, goVersions []Facet, er
 		goVersions = append(goVersions, Facet{fmt.Sprintf("%d.%d", n/1000, n%1000), c})
 	}
 	return licenses, goVersions, rows.Err()
+}
+
+// licenseCounts counts the modules under each license in the search
+// index. A module with several licenses counts toward each of them.
+func (r *Registry) licenseCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := r.DB.QueryContext(ctx, `SELECT license FROM module_meta WHERE license != ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	counts := map[string]int{}
+	for rows.Next() {
+		var l string
+		if err := rows.Scan(&l); err != nil {
+			return nil, err
+		}
+		for _, id := range strings.Split(l, ",") {
+			counts[id]++
+		}
+	}
+	return counts, rows.Err()
 }

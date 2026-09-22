@@ -118,7 +118,7 @@ func TestTyposquat(t *testing.T) {
 	popular := []string{"alice/backoff-retry"}
 	for name, rule := range map[string]string{
 		"gin-gonlc/gin":       "typosquatting", // one substitution from gin-gonic/gin
-		"stretchr/tesitfy":    "typosquatting", // swapped letters
+		"stretchr/tesitfy":    "typosquatting", //nolint:misspell // swapped letters, on purpose
 		"stretchr/testify":    "impersonation",
 		"alice/backof-retry":  "typosquatting", // a popular module here
 		"alice/retry":         "",

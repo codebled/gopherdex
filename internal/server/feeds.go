@@ -25,12 +25,17 @@ const feedSize = 50
 // feedLink is advertised in a page's <head> for feed readers.
 type feedLink struct{ Title, URL string }
 
+// Feed advertises the site-wide releases feed on the home page.
 func (d indexData) Feed() *feedLink {
 	return &feedLink{"New releases on Gopherdex", "/feeds/releases.atom"}
 }
+
+// Feed advertises the feed of an owner's releases on their page.
 func (d ownerData) Feed() *feedLink {
 	return &feedLink{"Releases by @" + d.Namespace, "/feeds/" + d.Namespace + ".atom"}
 }
+
+// Feed advertises the feed of a module's releases on its project page.
 func (d projectData) Feed() *feedLink {
 	return &feedLink{"Releases of " + d.Path, "/feeds" + d.URL + ".atom"}
 }

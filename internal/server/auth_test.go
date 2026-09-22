@@ -143,7 +143,7 @@ func TestAccountFlow(t *testing.T) {
 	expect(t, resp, body, http.StatusUnauthorized, "invalid")
 
 	// Revoke it from the account page.
-	resp, body = b.get("/account")
+	_, body = b.get("/account")
 	id := regexp.MustCompile(`/account/tokens/(\d+)/revoke`).FindStringSubmatch(body)
 	if id == nil {
 		t.Fatal("token row not listed")

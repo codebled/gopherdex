@@ -28,4 +28,4 @@ func Detect(text []byte) []string {
 }
 
 // FileNames are the root files checked for a license, in order.
-var FileNames = []string{"LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "LICENCE.txt", "COPYING", "COPYING.md", "COPYING.txt"}
+var FileNames = []string{"LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "LICENCE.txt", "COPYING", "COPYING.md", "COPYING.txt"} //nolint:misspell // LICENCE is the British spelling some modules use for the file name

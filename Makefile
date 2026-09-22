@@ -1,4 +1,4 @@
-.PHONY: run run-offline test vet check build dist docker clean bench-seed bench-serve bench-load
+.PHONY: run run-offline test vet fmt lint text tidy vuln actions check build dist docker clean bench-seed bench-serve bench-load
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo devel)
 LDFLAGS := -s -w -X github.com/parthiban-sivakumar/gopherdex/internal/version.Version=$(VERSION)
@@ -14,17 +14,44 @@ run-offline:
 # million files for the go command to walk.
 PKGS := ./cmd/... ./internal/... ./web/...
 
+# Tool versions, pinned so every contributor and CI get the same results.
+# `go run pkg@version` fetches and caches them: nothing to install.
+GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+GOVULNCHECK := go run golang.org/x/vuln/cmd/govulncheck@v1.8.0
+ACTIONLINT := go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+
 test:
-	go test $(PKGS)
+	go test -race $(PKGS)
 
 vet:
 	go vet $(PKGS)
 
-# What CI runs.
-check:
-	test -z "$$(gofmt -l cmd internal web)" || (gofmt -l cmd internal web && exit 1)
-	go vet $(PKGS)
-	go test $(PKGS)
+# Formatting: gofmt and goimports. `make fmt` also fixes it.
+fmt:
+	$(GOLANGCI_LINT) fmt $(PKGS)
+
+lint:
+	$(GOLANGCI_LINT) run $(PKGS)
+
+# Trailing whitespace and final newlines in every tracked text file.
+text:
+	scripts/check-text.sh
+
+# go.mod and go.sum match what the code imports.
+tidy:
+	go mod tidy -diff
+
+# Known vulnerabilities reachable from our code (needs the network).
+vuln:
+	$(GOVULNCHECK) $(PKGS)
+
+# GitHub workflow files: inputs, expressions and shell steps.
+actions:
+	$(ACTIONLINT)
+
+# Everything CI checks, except vuln (network) and the migrations check
+# (needs the pull request's base branch). Run it before you push.
+check: lint text tidy test
 
 build:
 	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/gopherdexd ./cmd/gopherdexd

@@ -97,5 +97,4 @@ func TestManageFlows(t *testing.T) {
 	expect(t, resp, body, http.StatusConflict, "is taken")
 	resp, body = alice.get("/account")
 	expect(t, resp, body, http.StatusOK, "gopherdex.test/acme/")
-
 }

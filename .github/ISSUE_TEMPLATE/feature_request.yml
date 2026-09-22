@@ -1,0 +1,22 @@
+name: Feature request
+description: Suggest an idea or an improvement.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way? Describe the need before the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What you'd like
+      description: How you imagine it working. Other registries' approaches (pypi.org, npm, crates.io) are welcome as examples.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to work on this myself.

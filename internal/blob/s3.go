@@ -64,6 +64,7 @@ type releasing struct {
 	release func()
 }
 
+// Close closes the underlying reader and gives back the download slot.
 func (r releasing) Close() error {
 	err := r.Reader.Close()
 	r.release()
@@ -204,7 +205,7 @@ func (s *S3) Put(ctx context.Context, key string, r io.Reader, maxSize int64) (I
 		return Info{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, s.objectURL(key).String(), tmp)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, s.objectURL(key).String(), tmp) //nolint:gosec // endpoint and bucket come from the operator's -blobs setting; keys pass checkKey
 	if err != nil {
 		return Info{}, err
 	}
@@ -212,7 +213,7 @@ func (s *S3) Put(ctx context.Context, key string, r io.Reader, maxSize int64) (I
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("If-None-Match", "*") // never overwrite
 	s.sign(req, sum)
-	resp, err := s.client().Do(req)
+	resp, err := s.client().Do(req) //nolint:gosec // endpoint and bucket come from the operator's -blobs setting; keys pass checkKey
 	if err != nil {
 		return Info{}, fmt.Errorf("upload %s: %w", key, err)
 	}
@@ -247,12 +248,12 @@ func (s *S3) Open(ctx context.Context, key string) (Reader, error) {
 }
 
 func (s *S3) open(ctx context.Context, key string) (Reader, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.objectURL(key).String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.objectURL(key).String(), nil) //nolint:gosec // endpoint and bucket come from the operator's -blobs setting; keys pass checkKey
 	if err != nil {
 		return nil, err
 	}
 	s.sign(req, emptySHA256)
-	resp, err := s.client().Do(req)
+	resp, err := s.client().Do(req) //nolint:gosec // endpoint and bucket come from the operator's -blobs setting; keys pass checkKey
 	if err != nil {
 		return nil, fmt.Errorf("download %s: %w", key, err)
 	}
@@ -304,12 +305,12 @@ func (s *S3) Keys(ctx context.Context, fn func(key string) error) error {
 			u.Path = "/"
 		}
 		u.RawQuery = q.Encode()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil) //nolint:gosec // endpoint and bucket come from the operator's -blobs setting
 		if err != nil {
 			return err
 		}
 		s.sign(req, emptySHA256)
-		resp, err := s.client().Do(req)
+		resp, err := s.client().Do(req) //nolint:gosec // endpoint and bucket come from the operator's -blobs setting
 		if err != nil {
 			return err
 		}
@@ -345,10 +346,14 @@ type listResult struct {
 	NextContinuationToken string `xml:"NextContinuationToken"`
 }
 
+// memReader is a Reader over a blob held in memory.
 type memReader struct{ *bytes.Reader }
 
+// Close does nothing: there is nothing to release.
 func (m *memReader) Close() error { return nil }
-func (m *memReader) Size() int64  { return m.Reader.Size() }
+
+// Size returns the blob's length in bytes.
+func (m *memReader) Size() int64 { return m.Reader.Size() }
 
 func s3Error(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))

@@ -94,14 +94,16 @@ func seed(ctx context.Context, args []string) error {
 	maxZip := fs.Int64("max-zip", 8<<20, "skip real zips larger than this many bytes")
 	skipChecks := fs.Bool("skip-checks", false, "publish without the publish-time safety checks")
 	rnd := fs.Uint64("seed", 1, "random seed; the same seed and cache give the same dataset")
-	real := fs.Int("real", -1, "override: real modules to sample")
+	realMods := fs.Int("real", -1, "override: real modules to sample")
 	zips := fs.Int("zips", -1, "override: real modules published with their real source")
 	modules := fs.Int("modules", -1, "override: total modules")
 	versions := fs.Int("versions", -1, "override: total versions (roughly)")
 	users := fs.Int("users", -1, "override: publisher accounts")
 	orgs := fs.Int("orgs", -1, "override: organizations")
 	downloads := fs.Int("downloads", -1, "override: downloads per day, spread by popularity")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
 	p, ok := profiles[*prof]
 	if !ok {
@@ -122,7 +124,7 @@ func seed(ctx context.Context, args []string) error {
 		DB: filepath.Join(data, "gopherdex.db"), Blobs: filepath.Join(data, "blobs"), Out: data, ModuleHost: *host,
 		Upstream: &bench.Upstream{Index: strings.TrimSuffix(*index, "/"), Proxy: strings.TrimSuffix(*proxy, "/"),
 			Cache: filepath.Join(*dir, "cache"), HTTP: &http.Client{Timeout: 2 * time.Minute}, MaxZip: *maxZip},
-		Real: pick(*real, p.real), Zips: pick(*zips, p.zips), Modules: pick(*modules, p.modules), Versions: pick(*versions, p.versions),
+		Real: pick(*realMods, p.real), Zips: pick(*zips, p.zips), Modules: pick(*modules, p.modules), Versions: pick(*versions, p.versions),
 		Users: pick(*users, p.users), Orgs: pick(*orgs, p.orgs), DownloadsPerDay: pick(*downloads, p.downloads),
 		Since: from, Windows: *windows, Concurrency: *conc, SkipChecks: *skipChecks, Seed: *rnd,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Progress: os.Stderr,
@@ -131,7 +133,9 @@ func seed(ctx context.Context, args []string) error {
 	rep, err := bench.Seed(ctx, cfg)
 	if rep != nil {
 		writeSeedReport(os.Stdout, rep, time.Since(start))
-		saveJSON(filepath.Join(data, "seed-report.json"), rep)
+		if err := saveJSON(filepath.Join(data, "seed-report.json"), rep); err != nil {
+			fmt.Fprintln(os.Stderr, "gdxbench: save seed report:", err)
+		}
 	}
 	if err == nil {
 		fmt.Printf("\nDataset ready. Serve it with:\n  gopherdexd -db %s -blobs %s -module-host %s -offline -trust-proxy\n",
@@ -181,7 +185,9 @@ func load(ctx context.Context, args []string) error {
 	newShare := fs.Float64("new-share", 0.3, "fraction of uploads that are brand-new modules; the rest are new versions")
 	loginRate := fs.Float64("login-rate", 0, "password sign-ins per second")
 	window := fs.Duration("window", 30*time.Second, "timeline resolution in the report")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 
 	u, err := url.Parse(*base)
 	if err != nil || u.Host == "" {
@@ -218,7 +224,9 @@ func prepareAccounts(ctx context.Context, args []string) error {
 	dir := fs.String("dir", "bench", "the benchmark directory seed wrote")
 	publishers := fs.Int("publishers", 200, "existing publishers to give API tokens (each may upload 60 releases an hour)")
 	users := fs.Int("users", 50, "fresh accounts with known passwords, for sign-ins and brand-new modules")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
 	out := filepath.Join(*dir, "data", "accounts.tsv")
 	n, err := bench.PrepareAccounts(ctx, bench.AccountsConfig{DB: filepath.Join(*dir, "data", "gopherdex.db"), Out: out,
 		Publishers: *publishers, NewUsers: *users})
@@ -253,7 +261,7 @@ func saveJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	return os.WriteFile(path, b, 0o600)
 }
 
 func human(n int64) string {

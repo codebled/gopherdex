@@ -449,7 +449,7 @@ func (r *renderer) html(text, anchor string) template.HTML {
 	out := string(pr.HTML(d))
 	// Links in comments are the author's, not ours.
 	out = strings.ReplaceAll(out, `<a href="http`, `<a rel="nofollow ugc noopener" href="http`)
-	return template.HTML(out)
+	return template.HTML(out) //nolint:gosec // go/doc/comment's printer escapes the text, and safeLinks has dropped non-http(s) link targets
 }
 
 // safeLinks replaces link targets that aren't http(s) (javascript:,

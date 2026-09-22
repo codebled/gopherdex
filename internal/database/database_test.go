@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -77,13 +78,7 @@ func TestCheckpointRestartsWAL(t *testing.T) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.QueryContext(ctx, `SELECT name FROM namespaces`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rows.Next() // reading the latest snapshot doesn't block a restart
-	frames, restarted, err := CheckpointOnce(ctx, db)
-	rows.Close()
+	frames, restarted, err := checkpointWhileReading(t, db)
 	if err != nil || !restarted || frames <= restartAbove {
 		t.Fatalf("large log: %d frames, restarted %v, %v", frames, restarted, err)
 	}
@@ -95,4 +90,20 @@ func TestCheckpointRestartsWAL(t *testing.T) {
 			t.Fatalf("busy_timeout = %d after a checkpoint", ms)
 		}
 	}
+}
+
+// checkpointWhileReading runs CheckpointOnce with a query part-way through
+// reading the latest snapshot, which shouldn't block a restart.
+func checkpointWhileReading(t *testing.T, db *sql.DB) (frames int, restarted bool, err error) {
+	t.Helper()
+	ctx := t.Context()
+	rows, err := db.QueryContext(ctx, `SELECT name FROM namespaces`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatalf("no rows to read: %v", rows.Err())
+	}
+	return CheckpointOnce(ctx, db)
 }

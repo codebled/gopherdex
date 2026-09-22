@@ -76,7 +76,12 @@ func CheckpointOnce(ctx context.Context, db *sql.DB) (frames int, restarted bool
 	if _, err := conn.ExecContext(ctx, fmt.Sprintf(`PRAGMA busy_timeout = %d`, restartWait.Milliseconds())); err != nil {
 		return logFrames, false, err
 	}
-	defer conn.ExecContext(context.Background(), `PRAGMA busy_timeout = 5000`) // back to Open's setting before reuse
+	defer func() {
+		// Back to Open's setting before the pool reuses the connection.
+		if _, resetErr := conn.ExecContext(context.Background(), `PRAGMA busy_timeout = 5000`); resetErr != nil && err == nil {
+			err = fmt.Errorf("reset busy timeout: %w", resetErr)
+		}
+	}()
 	if err := conn.QueryRowContext(ctx, `PRAGMA wal_checkpoint(RESTART)`).Scan(&busy, &logFrames, &done); err != nil {
 		return logFrames, false, err
 	}

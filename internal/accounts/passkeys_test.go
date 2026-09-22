@@ -64,7 +64,7 @@ func TestPasskeys(t *testing.T) {
 		t.Errorf("wrong origin: %v", err)
 	}
 	old := key.Get(t, login)
-	login, token, _ = s.BeginPasskeyLogin(ctx)
+	_, token, _ = s.BeginPasskeyLogin(ctx)
 	if _, _, err := s.FinishPasskeyLogin(ctx, token, bytes.NewReader(old), client); !errors.Is(err, ErrPasskey) {
 		t.Errorf("answer to an old challenge: %v", err)
 	}

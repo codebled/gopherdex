@@ -40,7 +40,7 @@ func login(ctx context.Context, args []string, env Env) error {
 	if err != nil {
 		var ae *apiError
 		if errors.As(err, &ae) && ae.Status == 401 {
-			return fmt.Errorf("%s rejected that token: %v", registry, err)
+			return fmt.Errorf("%s rejected that token: %w", registry, err)
 		}
 		return err
 	}

@@ -78,7 +78,7 @@ func (w *writers) run(ctx context.Context, name string, rate float64, measureFro
 	defer t.Stop()
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // varies test uploads, never secrets
 	for {
 		select {
 		case <-ctx.Done():
@@ -89,7 +89,7 @@ func (w *writers) run(ctx context.Context, name string, rate float64, measureFro
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s := w.once(ctx, name, rand.New(rand.NewSource(seed)))
+			s := w.once(ctx, name, rand.New(rand.NewSource(seed))) //nolint:gosec // generates test modules and names, never secrets
 			if ctx.Err() != nil && s.failed {
 				return
 			}
@@ -194,8 +194,9 @@ func nextPatch(v string) string {
 func (w *writers) upload(ctx context.Context, a Account, modPath, version string) sample {
 	body := &bytes.Buffer{}
 	mw := multipart.NewWriter(body)
-	mw.WriteField("module", modPath)
-	mw.WriteField("version", version)
+	// Writes to a bytes.Buffer can't fail.
+	_ = mw.WriteField("module", modPath)
+	_ = mw.WriteField("version", version)
 	zw, _ := mw.CreateFormFile("zip", "module.zip")
 	if err := writeSmallZip(zw, modPath, version); err != nil {
 		return sample{status: "zip-error", failed: true}
@@ -211,14 +212,15 @@ func (w *writers) send(req *http.Request, ok ...int) sample {
 	req.Header.Set("User-Agent", userAgent)
 	// Like the readers, each request comes from one of many clients, so
 	// per-IP limits apply as they would to real users.
-	n := rand.Intn(max(w.l.cfg.ClientIPs, 1))
+	n := rand.Intn(max(w.l.cfg.ClientIPs, 1)) //nolint:gosec // picks a simulated client IP, not a secret
 	req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.%d.%d.%d", n>>16&255, n>>8&255, n&255))
 	t0 := time.Now()
 	resp, err := w.client.Do(req)
 	if err != nil {
 		return sample{d: time.Since(t0), status: "error", failed: true}
 	}
-	io.Copy(io.Discard, resp.Body)
+	// The status code is the result; draining lets the connection be reused.
+	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
 	d := time.Since(t0)
 	for _, code := range ok {

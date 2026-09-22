@@ -202,8 +202,8 @@ func Load(ctx context.Context, cfg LoadConfig) (*LoadReport, error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r := rand.New(rand.NewSource(cfg.Seed + int64(w)))
-			zipf := rand.NewZipf(r, 1.2, 1, uint64(len(l.targets)-1))
+			r := rand.New(rand.NewSource(cfg.Seed + int64(w)))        //nolint:gosec // seeded, reproducible load pattern, not secrets
+			zipf := rand.NewZipf(r, 1.2, 1, uint64(len(l.targets)-1)) //nolint:gosec // readTargets requires at least 2 targets, so this is positive
 			ip := fmt.Sprintf("10.%d.%d.%d", r.Intn(256), r.Intn(256), 1+r.Intn(250))
 			mine := map[string][]sample{}
 			defer func() { results[w] = mine }()
@@ -437,7 +437,7 @@ func (l *loader) readTargets() error {
 	sort.Strings(l.queries)
 	// Shuffle once so hot modules are spread over the file, not just the
 	// real ones at its top.
-	r := rand.New(rand.NewSource(l.cfg.Seed))
+	r := rand.New(rand.NewSource(l.cfg.Seed)) //nolint:gosec // seeded, reproducible shuffle of test targets, not secrets
 	r.Shuffle(len(l.targets), func(i, j int) { l.targets[i], l.targets[j] = l.targets[j], l.targets[i] })
 	return nil
 }

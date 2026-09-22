@@ -38,18 +38,18 @@ func TestAccountSettings(t *testing.T) {
 	expect(t, resp, body, http.StatusSeeOther, "")
 	resp, body = alice.get("/account?done=email-change-sent")
 	expect(t, resp, body, http.StatusOK, "Waiting for you to open the link sent to <strong>alice@new.example</strong>")
-	// A change can be cancelled; its link stops working.
+	// A change can be canceled; its link stops working.
 	stale := regexp.MustCompile(`/verify-email\?token=\S+`).FindString(env.mails.find(t, "alice@new.example", "Confirm your new email"))
 	resp, body = alice.post("/account/email/cancel", nil)
 	expect(t, resp, body, http.StatusSeeOther, "")
-	resp, body = alice.get("/account?done=email-cancelled")
-	expect(t, resp, body, http.StatusOK, "Email change cancelled")
+	resp, body = alice.get("/account?done=email-canceled")
+	expect(t, resp, body, http.StatusOK, "Email change canceled")
 	if strings.Contains(body, "Waiting for you to open") {
-		t.Error("cancelled change still shown")
+		t.Error("canceled change still shown")
 	}
 	resp, _ = alice.get(stale)
 	if loc := resp.Header.Get("Location"); loc == "/account?done=email-changed" {
-		t.Fatal("a cancelled change's link still changed the address")
+		t.Fatal("a canceled change's link still changed the address")
 	}
 	env.mails.reset()
 	alice.post("/account/email", url.Values{"new_email": {"alice@new.example"}, "current_password": {"correct horse battery"}})

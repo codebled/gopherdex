@@ -59,7 +59,12 @@ func checkPassword(password, encoded string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("bad argon2 key: %w", err)
 	}
-	got := argon2.IDKey([]byte(password), salt, iterations, memory, threads, uint32(len(want)))
+	if len(want) < 16 || len(salt) < 8 {
+		// An empty key would match every password. Only a damaged or
+		// tampered database holds one; refuse rather than sign anyone in.
+		return false, errors.New("argon2 hash too short")
+	}
+	got := argon2.IDKey([]byte(password), salt, iterations, memory, threads, uint32(len(want))) //nolint:gosec // want is decoded from a stored hash, far shorter than 4 GiB
 	return subtle.ConstantTimeCompare(got, want) == 1, nil
 }
 

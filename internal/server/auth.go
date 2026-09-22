@@ -65,7 +65,7 @@ func (s *server) requireUser(w http.ResponseWriter, r *http.Request) *accounts.U
 }
 
 func (s *server) setSession(w http.ResponseWriter, secret string) {
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // Secure is off only for plain-HTTP local development
 		Name:     sessionCookie,
 		Value:    secret,
 		Path:     "/",
@@ -77,7 +77,7 @@ func (s *server) setSession(w http.ResponseWriter, secret string) {
 }
 
 func (s *server) clearSession(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteLaxMode}) //nolint:gosec // Secure is off only for plain-HTTP local development
 }
 
 // clientOf identifies the caller for rate limits and the audit log. Behind
@@ -207,7 +207,7 @@ type loginData struct {
 func (s *server) handleLoginForm(w http.ResponseWriter, r *http.Request) {
 	next := safeNext(r.URL.Query().Get("next"))
 	if s.currentUser(r) != nil {
-		http.Redirect(w, r, next, http.StatusSeeOther)
+		http.Redirect(w, r, next, http.StatusSeeOther) //nolint:gosec // safeNext only allows site-relative paths
 		return
 	}
 	s.render(w, r, http.StatusOK, "login", "Sign in", loginData{Next: next})
@@ -363,7 +363,7 @@ var notices = map[string]string{
 	"token-revoked":     "Token revoked. Anything using it can no longer publish.",
 	"email-change-sent": "Check your new inbox: the address changes when you open the link we sent there. Until then, emails still go to your current address.",
 	"email-changed":     "Your email address is changed. We told your old address too.",
-	"email-cancelled":   "Email change cancelled. Your address stays the same, and the link we sent no longer works.",
+	"email-canceled":    "Email change canceled. Your address stays the same, and the link we sent no longer works.",
 	"invite-accepted":   "Invitation accepted. You have that role now.",
 	"invite-declined":   "Invitation declined.",
 	"left":              "Done. You no longer have that role.",

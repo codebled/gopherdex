@@ -30,42 +30,28 @@ func (r *Registry) Signals(ctx context.Context, hits []SearchHit) (map[string]Si
 	}
 	in := "(" + strings.Join(marks, ",") + ")"
 
-	rows, err := r.DB.QueryContext(ctx, `SELECT vr.path, COUNT(*)
+	usedBy, err := pathValues[int](ctx, r, `SELECT vr.path, COUNT(*)
 		FROM version_requires vr JOIN versions v ON v.id = vr.version_id JOIN modules m ON m.id = v.module_id
-		WHERE vr.path IN `+in+` AND `+isLatest+` GROUP BY vr.path`, paths...)
+		WHERE vr.path IN `+in+` AND `+isLatest+` GROUP BY vr.path`, paths)
 	if err != nil {
 		return nil, fmt.Errorf("search signals: %w", err)
 	}
-	for rows.Next() {
-		var p string
-		var n int
-		if err := rows.Scan(&p, &n); err != nil {
-			rows.Close()
-			return nil, err
-		}
+	for p, n := range usedBy {
 		s := out[p]
 		s.UsedBy = n
 		out[p] = s
 	}
-	rows.Close()
 
-	rows, err = r.DB.QueryContext(ctx, `SELECT m.path, v.provenance != '' FROM modules m JOIN versions v ON v.module_id = m.id
-		WHERE m.path IN `+in+` AND `+isLatest, paths...)
+	verified, err := pathValues[bool](ctx, r, `SELECT m.path, v.provenance != '' FROM modules m JOIN versions v ON v.module_id = m.id
+		WHERE m.path IN `+in+` AND `+isLatest, paths)
 	if err != nil {
 		return nil, fmt.Errorf("search signals: %w", err)
 	}
-	for rows.Next() {
-		var p string
-		var verified bool
-		if err := rows.Scan(&p, &verified); err != nil {
-			rows.Close()
-			return nil, err
-		}
+	for p, ok := range verified {
 		s := out[p]
-		s.Verified = verified
+		s.Verified = ok
 		out[p] = s
 	}
-	rows.Close()
 
 	advisories, err := r.advisories(ctx, ` AND m.path IN `+in, paths...)
 	if err != nil {
@@ -79,4 +65,24 @@ func (r *Registry) Signals(ctx context.Context, hits []SearchHit) (map[string]Si
 		}
 	}
 	return out, nil
+}
+
+// pathValues runs a query whose rows are a module path and one value,
+// and returns the values by path.
+func pathValues[T any](ctx context.Context, r *Registry, query string, args []any) (map[string]T, error) {
+	rows, err := r.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]T{}
+	for rows.Next() {
+		var p string
+		var v T
+		if err := rows.Scan(&p, &v); err != nil {
+			return nil, err
+		}
+		out[p] = v
+	}
+	return out, rows.Err()
 }

@@ -67,7 +67,7 @@ func TestPasskeysOverHTTP(t *testing.T) {
 
 	// Sign in with it, no password.
 	fresh := newBrowser(t, env.srv.URL)
-	resp, body = fresh.postJSONAs("/login/passkey/options", nil)
+	_, body = fresh.postJSONAs("/login/passkey/options", nil)
 	var assertion protocol.CredentialAssertion
 	json.Unmarshal([]byte(body), &assertion)
 	resp, body = fresh.postJSONAs("/login/passkey?next=/alice/retry", key.Get(t, &assertion))
@@ -92,7 +92,7 @@ func TestPasskeysOverHTTP(t *testing.T) {
 	resp, body = second.get("/login/2fa")
 	expect(t, resp, body, http.StatusOK, "Use a passkey")
 	expect(t, resp, body, http.StatusOK, "Recovery code")
-	resp, body = second.postJSONAs("/login/2fa/passkey/options", nil)
+	_, body = second.postJSONAs("/login/2fa/passkey/options", nil)
 	json.Unmarshal([]byte(body), &assertion)
 	resp, body = second.postJSONAs("/login/2fa/passkey", key.Get(t, &assertion))
 	if resp.StatusCode != http.StatusOK {

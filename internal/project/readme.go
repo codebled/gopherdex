@@ -30,7 +30,7 @@ func renderReadme(name string, src []byte, repo *forge) template.HTML {
 	}
 	ext := strings.ToLower(path.Ext(name))
 	if ext != ".md" && ext != ".markdown" {
-		return template.HTML("<pre class=\"readme-text\">" + template.HTMLEscapeString(string(src)) + "</pre>")
+		return template.HTML("<pre class=\"readme-text\">" + template.HTMLEscapeString(string(src)) + "</pre>") //nolint:gosec // the README text is HTML-escaped
 	}
 	md := goldmark.New(
 		goldmark.WithExtensions(extension.GFM),
@@ -38,11 +38,11 @@ func renderReadme(name string, src []byte, repo *forge) template.HTML {
 	)
 	var buf bytes.Buffer
 	if err := md.Convert(src, &buf); err != nil {
-		return template.HTML("<pre class=\"readme-text\">" + template.HTMLEscapeString(string(src)) + "</pre>")
+		return template.HTML("<pre class=\"readme-text\">" + template.HTMLEscapeString(string(src)) + "</pre>") //nolint:gosec // the README text is HTML-escaped
 	}
 	// READMEs are user content: don't pass search ranking to their links.
 	out := strings.ReplaceAll(buf.String(), `<a href="http`, `<a rel="nofollow ugc noopener" href="http`)
-	return template.HTML(out)
+	return template.HTML(out) //nolint:gosec // goldmark without WithUnsafe drops raw HTML and unsafe links
 }
 
 // forge knows how to link to files in a hosted git repository at a tag.
@@ -78,9 +78,12 @@ type linkRewriter struct {
 	repo *forge
 }
 
+// Transform implements parser.ASTTransformer. It points relative links and
+// images into the source repository and replaces the ones it cannot resolve
+// with their text.
 func (l *linkRewriter) Transform(doc *ast.Document, reader text.Reader, pc parser.Context) {
 	var unlink []ast.Node
-	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
@@ -99,7 +102,7 @@ func (l *linkRewriter) Transform(doc *ast.Document, reader text.Reader, pc parse
 			}
 		}
 		return ast.WalkContinue, nil
-	})
+	}) // the walker never returns an error
 	// Replace unresolvable links and images with their text.
 	for _, n := range unlink {
 		parent := n.Parent()

@@ -282,7 +282,9 @@ func (s *Service) content(ctx context.Context, modPath, version string) (*versio
 	if err != nil {
 		return nil, fmt.Errorf("list files of %s: %w", key, err)
 	}
-	fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+	// The callback skips entries it cannot read and never fails, so the walk
+	// cannot return an error.
+	_ = fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
 		if err == nil && !d.IsDir() {
 			c.files++
 			c.fileList = append(c.fileList, p)

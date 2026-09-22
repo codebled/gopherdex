@@ -95,7 +95,8 @@ func (u *Upstream) Zip(ctx context.Context, modPath, version string) (string, er
 	}
 	if _, err := u.cached(ctx, file, u.Proxy+"/"+rel, u.MaxZip); err != nil {
 		if errors.Is(err, errTooLarge) {
-			os.WriteFile(file+".toolarge", nil, 0o644)
+			// The marker only saves asking again next run; losing it is harmless.
+			_ = os.WriteFile(file+".toolarge", nil, 0o600)
 		}
 		return "", err
 	}
@@ -138,11 +139,11 @@ func (u *Upstream) cached(ctx context.Context, key, src string, limit int64) ([]
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(key), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(key), 0o750); err != nil {
 		return nil, err
 	}
 	tmp := key + ".part"
-	if err := os.WriteFile(tmp, body, 0o644); err != nil {
+	if err := os.WriteFile(tmp, body, 0o600); err != nil {
 		return nil, err
 	}
 	return body, os.Rename(tmp, key)
@@ -175,7 +176,8 @@ func (u *Upstream) get(ctx context.Context, src string, limit int64) ([]byte, er
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		// Drained only so the connection can be reused; the status is the error.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
 		return nil, &statusError{src, resp.StatusCode}
 	}
 	if limit > 0 && resp.ContentLength > limit {

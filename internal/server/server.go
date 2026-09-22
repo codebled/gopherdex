@@ -312,7 +312,7 @@ func (s *server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		if v := r.URL.Query().Get("v"); module.CheckVersion(v) == nil {
 			target = s.project.URL(m, v)
 		}
-		http.Redirect(w, r, target, http.StatusFound)
+		http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // target is a site-relative path built from a checked module path
 		return
 	}
 	// Searches used to live on the home page.
@@ -608,7 +608,7 @@ func (s *server) recoverPanics(next http.Handler) http.Handler {
 			if v == nil {
 				return
 			}
-			if v == http.ErrAbortHandler {
+			if err, ok := v.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 				panic(v) // deliberate abort; net/http closes the connection quietly
 			}
 			s.log.Error("panic serving request", "method", r.Method, "path", r.URL.Path, "panic", v, "stack", string(debug.Stack()))
@@ -624,6 +624,7 @@ type statusRecorder struct {
 	bytes  int64
 }
 
+// WriteHeader records the first status code before passing it on.
 func (r *statusRecorder) WriteHeader(code int) {
 	if r.status == 0 {
 		r.status = code

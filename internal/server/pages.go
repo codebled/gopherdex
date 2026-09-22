@@ -57,7 +57,7 @@ func parsePages() (map[string]*template.Template, error) {
 		"trimPrefix": strings.TrimPrefix,
 		// breakable lets long module paths wrap only after a slash.
 		"breakable": func(p string) template.HTML {
-			return template.HTML(strings.ReplaceAll(template.HTMLEscapeString(p), "/", "/<wbr>"))
+			return template.HTML(strings.ReplaceAll(template.HTMLEscapeString(p), "/", "/<wbr>")) //nolint:gosec // p is HTML-escaped; only <wbr> is added
 		},
 		"short": func(s string, n int) string {
 			if len(s) > n {
@@ -150,7 +150,9 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 		w.Header().Set("Cache-Control", "no-cache")
 	}
 	w.WriteHeader(status)
-	buf.WriteTo(w)
+	if _, err := buf.WriteTo(w); err != nil {
+		s.log.Warn("write page", "path", r.URL.Path, "err", err)
+	}
 }
 
 func (s *server) serverError(w http.ResponseWriter, r *http.Request, err error) {

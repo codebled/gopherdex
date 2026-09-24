@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 // writeFiles creates files under dir; keys are slash-separated paths.

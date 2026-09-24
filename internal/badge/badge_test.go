@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/tokens"
+	"github.com/codebled/gopherdex/internal/tokens"
 )
 
 func TestSVG(t *testing.T) {

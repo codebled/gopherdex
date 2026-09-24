@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 const (

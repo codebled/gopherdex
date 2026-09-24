@@ -5,7 +5,7 @@
 #   docker compose logs -f gopherdex
 services:
   gopherdex:
-    image: ghcr.io/parthiban-sivakumar/gopherdex:latest
+    image: ghcr.io/codebled/gopherdex:latest
     build: ..
     restart: unless-stopped
     env_file: gopherdex.env

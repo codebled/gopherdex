@@ -6,7 +6,7 @@
 # run again: every step replaces the previous setting.
 set -eu
 
-repo=${1:-parthiban-sivakumar/gopherdex}
+repo=${1:-codebled/gopherdex}
 echo "Configuring $repo"
 
 # Pull requests are squash-merged; merged branches are deleted.

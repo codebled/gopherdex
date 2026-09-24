@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/accounts"
 )
 
 // handleChangeEmail starts an email change; the address changes once the

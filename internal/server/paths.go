@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/project"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
-	"github.com/parthiban-sivakumar/gopherdex/internal/scan"
+	"github.com/codebled/gopherdex/internal/godoc"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/project"
+	"github.com/codebled/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/scan"
 )
 
 // goImportPage answers the go command's ?go-get=1 lookup. The "mod" form

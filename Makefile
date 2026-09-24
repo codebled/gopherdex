@@ -1,7 +1,7 @@
 .PHONY: run run-offline test vet fmt lint text tidy vuln actions check build dist docker clean bench-seed bench-serve bench-load
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo devel)
-LDFLAGS := -s -w -X github.com/parthiban-sivakumar/gopherdex/internal/version.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/codebled/gopherdex/internal/version.Version=$(VERSION)
 PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64
 
 run:

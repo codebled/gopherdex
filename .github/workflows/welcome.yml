@@ -20,11 +20,11 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           issue_message: |
-            Thanks for opening your first issue here! A maintainer will look at it soon. If it's about a security problem, please close it and follow [SECURITY.md](https://github.com/parthiban-sivakumar/gopherdex/blob/main/SECURITY.md) instead.
+            Thanks for opening your first issue here! A maintainer will look at it soon. If it's about a security problem, please close it and follow [SECURITY.md](https://github.com/codebled/gopherdex/blob/main/SECURITY.md) instead.
           pr_message: |
             Thanks for your first pull request to Gopherdex! 🎉
 
             What happens next:
-            1. The CLA bot will ask you to sign the [Contributor License Agreement](https://github.com/parthiban-sivakumar/gopherdex/blob/main/CLA.md): reply with the sentence it gives you.
+            1. The CLA bot will ask you to sign the [Contributor License Agreement](https://github.com/codebled/gopherdex/blob/main/CLA.md): reply with the sentence it gives you.
             2. A maintainer approves the CI run (GitHub requires this for first-time contributors), then the checks run: tests, lint, and the rest. `make check` runs the same checks locally.
-            3. A maintainer reviews the change. See [CONTRIBUTING.md](https://github.com/parthiban-sivakumar/gopherdex/blob/main/CONTRIBUTING.md) for what reviewers look for.
+            3. A maintainer reviews the change. See [CONTRIBUTING.md](https://github.com/codebled/gopherdex/blob/main/CONTRIBUTING.md) for what reviewers look for.

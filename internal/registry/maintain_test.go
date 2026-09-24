@@ -7,8 +7,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 var client = accounts.Client{IP: "192.0.2.1"}

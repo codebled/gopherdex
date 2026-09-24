@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 // Team pages live at /orgs/<org>/teams/<team> ("orgs" is a reserved

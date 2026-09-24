@@ -17,7 +17,7 @@ import (
 	"golang.org/x/mod/semver"
 	modzip "golang.org/x/mod/zip"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/accounts"
 )
 
 // Module is one module to publish.

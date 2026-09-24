@@ -16,10 +16,10 @@ import (
 
 	xmodule "golang.org/x/mod/module"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/gomod"
-	"github.com/parthiban-sivakumar/gopherdex/internal/license"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/godoc"
+	"github.com/codebled/gopherdex/internal/gomod"
+	"github.com/codebled/gopherdex/internal/license"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 const maxIndexedReadme = 20 << 10

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/database"
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/database"
+	"github.com/codebled/gopherdex/internal/mail"
 )
 
 type recorder struct {

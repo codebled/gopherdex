@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/webauthntest"
+	"github.com/codebled/gopherdex/internal/webauthntest"
 )
 
 func TestPasskeys(t *testing.T) {

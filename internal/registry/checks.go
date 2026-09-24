@@ -10,7 +10,7 @@ import (
 
 	xmodule "golang.org/x/mod/module"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/scan"
+	"github.com/codebled/gopherdex/internal/scan"
 )
 
 // runChecks scans an upload before it's stored. Blocking findings refuse

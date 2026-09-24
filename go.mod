@@ -1,8 +1,8 @@
-module github.com/parthiban-sivakumar/gopherdex
+module github.com/codebled/gopherdex
 
 go 1.26.0
 
-toolchain go1.27.0
+toolchain go1.27.1
 
 require (
 	github.com/fxamacker/cbor/v2 v2.9.4

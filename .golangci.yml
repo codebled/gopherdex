@@ -89,4 +89,4 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - github.com/parthiban-sivakumar/gopherdex
+        - github.com/codebled/gopherdex

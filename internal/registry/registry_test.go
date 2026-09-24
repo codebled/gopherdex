@@ -17,11 +17,11 @@ import (
 	xmodule "golang.org/x/mod/module"
 	modzip "golang.org/x/mod/zip"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/blob"
-	"github.com/parthiban-sivakumar/gopherdex/internal/database"
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/blob"
+	"github.com/codebled/gopherdex/internal/database"
+	"github.com/codebled/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 const host = "gopherdex.test"

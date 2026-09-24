@@ -1,5 +1,5 @@
 # Push a tag like v0.9.0 to publish binaries on a GitHub release and the
-# container image to ghcr.io/parthiban-sivakumar/gopherdex.
+# container image to ghcr.io/codebled/gopherdex.
 name: Release
 on:
   push:

@@ -17,9 +17,9 @@ import (
 	xmodule "golang.org/x/mod/module"
 	modzip "golang.org/x/mod/zip"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
-	"github.com/parthiban-sivakumar/gopherdex/internal/vulndb"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/vulndb"
 )
 
 // fakeVulnDB serves a tiny public database: github.com/x/dep has

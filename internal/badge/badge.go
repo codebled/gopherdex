@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/tokens"
+	"github.com/codebled/gopherdex/internal/tokens"
 )
 
 // Style is a background and text color pair from the brand palette,

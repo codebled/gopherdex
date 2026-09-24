@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/discovery"
+	"github.com/codebled/gopherdex/internal/discovery"
 )
 
 // fakePkgsite answers pkg.go.dev's /v1/search, counting requests; delay

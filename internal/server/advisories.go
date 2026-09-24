@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
-	"github.com/parthiban-sivakumar/gopherdex/internal/vulndb"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/vulndb"
 )
 
 // ---- The vulnerability database, for govulncheck ----

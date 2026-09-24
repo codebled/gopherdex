@@ -19,16 +19,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/discovery"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/oidc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/project"
-	"github.com/parthiban-sivakumar/gopherdex/internal/ratelimit"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
-	"github.com/parthiban-sivakumar/gopherdex/internal/tokens"
-	"github.com/parthiban-sivakumar/gopherdex/internal/vulndb"
-	"github.com/parthiban-sivakumar/gopherdex/web"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/discovery"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/oidc"
+	"github.com/codebled/gopherdex/internal/project"
+	"github.com/codebled/gopherdex/internal/ratelimit"
+	"github.com/codebled/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/tokens"
+	"github.com/codebled/gopherdex/internal/vulndb"
+	"github.com/codebled/gopherdex/web"
 )
 
 const (

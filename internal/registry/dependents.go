@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/gomod"
+	"github.com/codebled/gopherdex/internal/gomod"
 )
 
 // recordRequires stores the requirements from a version's go.mod.

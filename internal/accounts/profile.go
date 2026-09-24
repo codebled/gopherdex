@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/mail"
 )
 
 // ErrLastOrgOwner blocks deleting an account that is the only owner of an

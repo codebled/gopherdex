@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/gomod"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/godoc"
+	"github.com/codebled/gopherdex/internal/gomod"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 // ErrUpstream reports that the public proxy failed to answer.

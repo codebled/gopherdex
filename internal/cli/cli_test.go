@@ -15,14 +15,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/blob"
-	"github.com/parthiban-sivakumar/gopherdex/internal/database"
-	"github.com/parthiban-sivakumar/gopherdex/internal/discovery"
-	"github.com/parthiban-sivakumar/gopherdex/internal/goproxy"
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
-	"github.com/parthiban-sivakumar/gopherdex/internal/server"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/blob"
+	"github.com/codebled/gopherdex/internal/database"
+	"github.com/codebled/gopherdex/internal/discovery"
+	"github.com/codebled/gopherdex/internal/goproxy"
+	"github.com/codebled/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/server"
 )
 
 const moduleHost = "gopherdex.test"
@@ -145,7 +145,11 @@ func gitRepo(t *testing.T, modPath string) string {
 
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
+	// gc.auto and maintenance.auto are off: git's background housekeeping
+	// would otherwise write into the repository after the test ends, and
+	// t.TempDir's cleanup then fails with "directory not empty".
+	cmd := exec.Command("git", append([]string{"-c", "user.name=Test", "-c", "user.email=test@example.com",
+		"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "gc.auto=0", "-c", "maintenance.auto=false"}, args...)...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)

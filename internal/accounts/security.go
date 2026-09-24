@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/mail"
 )
 
 var (

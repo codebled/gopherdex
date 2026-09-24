@@ -9,9 +9,9 @@ RUN go mod download
 COPY . .
 ARG VERSION=""
 ENV CGO_ENABLED=0
-RUN go build -trimpath -ldflags "-s -w -X github.com/parthiban-sivakumar/gopherdex/internal/version.Version=${VERSION}" \
+RUN go build -trimpath -ldflags "-s -w -X github.com/codebled/gopherdex/internal/version.Version=${VERSION}" \
         -o /out/gopherdexd ./cmd/gopherdexd && \
-    go build -trimpath -ldflags "-s -w -X github.com/parthiban-sivakumar/gopherdex/internal/version.Version=${VERSION}" \
+    go build -trimpath -ldflags "-s -w -X github.com/codebled/gopherdex/internal/version.Version=${VERSION}" \
         -o /out/gopherdex ./cmd/gopherdex && \
     mkdir -p /out/data
 

@@ -21,11 +21,11 @@ import (
 	xmodule "golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/gomod"
-	"github.com/parthiban-sivakumar/gopherdex/internal/license"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/godoc"
+	"github.com/codebled/gopherdex/internal/gomod"
+	"github.com/codebled/gopherdex/internal/license"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 // Page is everything the project page template needs.

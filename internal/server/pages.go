@@ -12,11 +12,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/godoc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/project"
-	"github.com/parthiban-sivakumar/gopherdex/internal/version"
-	"github.com/parthiban-sivakumar/gopherdex/web"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/godoc"
+	"github.com/codebled/gopherdex/internal/project"
+	"github.com/codebled/gopherdex/internal/version"
+	"github.com/codebled/gopherdex/web"
 )
 
 // page is the data every template receives. Data holds the page's own

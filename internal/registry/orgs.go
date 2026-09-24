@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/accounts"
 )
 
 // Org is an organization: a shared namespace, e.g. gopherdex.dev/acme/…,

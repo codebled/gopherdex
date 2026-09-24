@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/oidc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/oidc/oidctest"
-	"github.com/parthiban-sivakumar/gopherdex/internal/server"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/oidc"
+	"github.com/codebled/gopherdex/internal/oidc/oidctest"
+	"github.com/codebled/gopherdex/internal/server"
 )
 
 // TestTrustedPublish runs the whole flow: a GitHub Actions job with no API

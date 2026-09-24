@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/discovery"
-	"github.com/parthiban-sivakumar/gopherdex/internal/ranking"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/discovery"
+	"github.com/codebled/gopherdex/internal/ranking"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 const (

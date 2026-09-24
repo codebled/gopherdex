@@ -4,7 +4,7 @@ Gopherdex stores other people's code and credentials, so we take reports serious
 
 ## Reporting a vulnerability
 
-**Please don't open a public issue or pull request.** Report privately through GitHub instead: go to the repository's **Security** tab, then **Report a vulnerability** ([direct link](https://github.com/parthiban-sivakumar/gopherdex/security/advisories/new)). Only the maintainers can see the report.
+**Please don't open a public issue or pull request.** Report privately through GitHub instead: go to the repository's **Security** tab, then **Report a vulnerability** ([direct link](https://github.com/codebled/gopherdex/security/advisories/new)). Only the maintainers can see the report.
 
 Include what you can:
 

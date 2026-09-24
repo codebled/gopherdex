@@ -1,7 +1,8 @@
 #!/bin/sh
 # github-settings.sh applies the repository settings an open-source project
 # needs: protected main, pull-request reviews, required checks, labels for
-# newcomers, private vulnerability reports and safe Actions defaults.
+# newcomers, topics and Discussions, the maintainer and triage teams,
+# private vulnerability reports and safe Actions defaults.
 # Run it once as a repository admin (it uses your gh login). It's safe to
 # run again: every step replaces the previous setting.
 set -eu
@@ -37,6 +38,28 @@ label "bug"              d73a4a "Something doesn't work"
 label "enhancement"      a2eeef "New feature or improvement"
 label "security"         b60205 "Security hardening (report vulnerabilities privately: SECURITY.md)"
 label "dependencies"     0366d6 "Dependency updates"
+label "proposal"         c5def5 "A bigger change that needs agreement first (GOVERNANCE.md)"
+
+# Discoverability: topics for GitHub search and the Explore pages, and
+# Discussions for questions and ideas that aren't issues yet.
+gh repo edit "$repo" --enable-discussions \
+	--add-topic go --add-topic golang --add-topic go-modules --add-topic package-registry \
+	--add-topic goproxy --add-topic module-proxy --add-topic self-hosted --add-topic pypi
+
+# Teams (GOVERNANCE.md): maintainers review and merge, triagers label and
+# answer issues. CODEOWNERS requests reviews from the maintainers team, so
+# it must exist with write access. Whoever runs this script becomes a
+# maintainer of the team, so they can add the next people from the web UI.
+org=${repo%/*}
+team() { # name description permission
+	gh api "orgs/$org/teams/$1" >/dev/null 2>&1 ||
+		gh api -X POST "orgs/$org/teams" -f name="$1" -f description="$2" -f privacy=closed >/dev/null
+	gh api -X PUT "orgs/$org/teams/$1/repos/$repo" -f permission="$3"
+}
+team gopherdex-maintainers "Reviews, merges and releases Gopherdex (MAINTAINERS.md)" maintain
+team gopherdex-triage      "Labels and answers Gopherdex issues (GOVERNANCE.md)"     triage
+gh api -X PUT "orgs/$org/teams/gopherdex-maintainers/memberships/$(gh api user --jq .login)" \
+	-f role=maintainer >/dev/null
 
 # main: no direct pushes, force-pushes or deletion. Changes arrive by pull
 # request, with resolved conversations, a linear history, and every CI job

@@ -3,6 +3,9 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/codebled/gopherdex/security/advisories/new
     about: Report privately, never in a public issue.
+  - name: Ask a question or share an idea
+    url: https://github.com/codebled/gopherdex/discussions
+    about: Questions, ideas and show-and-tell go to Discussions; issues are for bugs and agreed work.
   - name: How to contribute
     url: https://github.com/codebled/gopherdex/blob/main/CONTRIBUTING.md
     about: Setup, checks, and what reviewers look for.

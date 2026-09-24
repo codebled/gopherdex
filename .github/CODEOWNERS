@@ -1,8 +1,16 @@
-# Reviews are requested from these people for changes to the paths below.
-# The last matching rule wins. Add co-maintainers per area as they join.
-*                                   @parthiban-sivakumar
+# Reviews are requested from these teams and people for changes to the paths
+# below. The last matching rule wins. The teams are created by
+# scripts/github-settings.sh; their members are listed in MAINTAINERS.md.
+# When a maintainer takes on an area, add a rule for it here.
+*                                   @codebled/gopherdex-maintainers
 
 # Security-sensitive areas: every change here needs a maintainer's review.
-/internal/accounts/                 @parthiban-sivakumar
-/internal/database/migrations/      @parthiban-sivakumar
-/.github/                           @parthiban-sivakumar
+/internal/accounts/                 @codebled/gopherdex-maintainers
+/internal/database/migrations/      @codebled/gopherdex-maintainers
+/.github/                           @codebled/gopherdex-maintainers
+
+# Project rules and governance: the lead maintainer reviews these.
+/GOVERNANCE.md                      @parthiban-sivakumar
+/MAINTAINERS.md                     @parthiban-sivakumar
+/LICENSE                            @parthiban-sivakumar
+/CLA.md                             @parthiban-sivakumar

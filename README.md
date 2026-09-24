@@ -4,6 +4,14 @@
 
 <p align="center">The Go module registry: publish, discover and install Go modules.</p>
 
+<p align="center">
+<a href="https://github.com/codebled/gopherdex/actions/workflows/ci.yml"><img src="https://github.com/codebled/gopherdex/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://goreportcard.com/report/github.com/codebled/gopherdex"><img src="https://goreportcard.com/badge/github.com/codebled/gopherdex" alt="Go Report Card"></a>
+<a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/codebled/gopherdex" alt="Go version"></a>
+<a href="LICENSE"><img src="https://img.shields.io/github/license/codebled/gopherdex" alt="License: AGPL-3.0"></a>
+<a href="https://github.com/codebled/gopherdex/labels/good%20first%20issue"><img src="https://img.shields.io/github/issues/codebled/gopherdex/good%20first%20issue?label=good%20first%20issues" alt="Good first issues"></a>
+</p>
+
 
 A package registry for Go modules, in the spirit of pypi.org.
 
@@ -610,8 +618,10 @@ Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md): setup,
 - **main is protected:** changes arrive by pull request, with passing checks and a maintainer's review. Pull requests are squash-merged.
 - **First-time contributors:** a welcome message explains the steps; a maintainer approves the first CI run; the [CLA](CLA.md) is signed once, by replying to a bot. Issues labelled `good first issue` are a good place to start.
 - **Security problems** are reported privately: see [SECURITY.md](SECURITY.md).
+- **Questions and ideas** go to [Discussions](https://github.com/codebled/gopherdex/discussions); issues are for bugs and agreed work.
+- **Who decides what:** [GOVERNANCE.md](GOVERNANCE.md) describes the roles, how to become a triager or maintainer, and how decisions are made. [MAINTAINERS.md](MAINTAINERS.md) lists the current maintainers.
 - Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md).
-- Maintainers apply the repository's settings with `scripts/github-settings.sh`: branch rules, labels, private vulnerability reporting and Actions defaults.
+- Maintainers apply the repository's settings with `scripts/github-settings.sh`: branch rules, labels, topics, Discussions, the maintainer and triage teams, private vulnerability reporting and Actions defaults.
 
 ## License
 

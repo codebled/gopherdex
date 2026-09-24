@@ -39,11 +39,16 @@ label "security"         b60205 "Security hardening (report vulnerabilities priv
 label "dependencies"     0366d6 "Dependency updates"
 
 # main: no direct pushes, force-pushes or deletion. Changes arrive by pull
-# request, with one approving review (code owners for their paths),
-# resolved conversations, a linear history, and every CI job passing on an
-# up-to-date branch. Repository admins can bypass, so a sole maintainer can
-# still merge their own pull requests once CI passes: remove the bypass
-# once there's a second maintainer.
+# request, with resolved conversations, a linear history, and every CI job
+# passing on an up-to-date branch.
+#
+# No approving review is required while one person maintains the project:
+# GitHub won't let anyone approve their own pull request, so the rule only
+# forced the maintainer to tick "bypass rules" on every change. Merging
+# still needs write access, so an outside contributor's pull request waits
+# for a maintainer either way. When a second maintainer joins, restore
+# "required_approving_review_count": 1 and "require_code_owner_review":
+# true below, and drop the bypass_actors entry.
 existing=$(gh api "repos/$repo/rulesets" --jq '.[] | select(.name == "main") | .id')
 method=POST path="repos/$repo/rulesets"
 if [ -n "$existing" ]; then method=PUT path="repos/$repo/rulesets/$existing"; fi
@@ -59,9 +64,9 @@ gh api -X "$method" "$path" --input - >/dev/null <<'JSON'
     { "type": "non_fast_forward" },
     { "type": "required_linear_history" },
     { "type": "pull_request", "parameters": {
-        "required_approving_review_count": 1,
+        "required_approving_review_count": 0,
         "dismiss_stale_reviews_on_push": true,
-        "require_code_owner_review": true,
+        "require_code_owner_review": false,
         "require_last_push_approval": false,
         "required_review_thread_resolution": true,
         "allowed_merge_methods": ["squash"]

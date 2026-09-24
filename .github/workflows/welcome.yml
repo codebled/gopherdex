@@ -14,6 +14,14 @@ permissions:
 
 jobs:
   welcome:
+    # Only people GitHub marks as first-time contributors, never members or
+    # maintainers: the action's own check counts a repository's first pull
+    # request, which greeted the maintainer after the repository moved.
+    if: >-
+      github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' ||
+      github.event.pull_request.author_association == 'FIRST_TIMER' ||
+      github.event.issue.author_association == 'FIRST_TIME_CONTRIBUTOR' ||
+      github.event.issue.author_association == 'FIRST_TIMER'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0

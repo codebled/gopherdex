@@ -14,7 +14,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/version"
+	"github.com/codebled/gopherdex/internal/version"
 )
 
 // Env is everything the command touches outside itself, so tests can

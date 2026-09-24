@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/accounts"
 )
 
 // sentTo reports whether any email to "to" has a subject containing subject.

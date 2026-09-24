@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 // The public JSON API, version 1. It only grows: fields are added, never

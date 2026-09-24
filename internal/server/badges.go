@@ -7,9 +7,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/badge"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/badge"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 // badgeKinds are the badges a module can show, with their default labels.

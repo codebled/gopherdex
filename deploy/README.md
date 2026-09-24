@@ -19,7 +19,7 @@ What's in this directory:
 
 ```bash
 # on the server
-git clone https://github.com/parthiban-sivakumar/gopherdex && cd gopherdex/deploy
+git clone https://github.com/codebled/gopherdex && cd gopherdex/deploy
 cp gopherdex.env.example gopherdex.env && chmod 600 gopherdex.env
 $EDITOR gopherdex.env           # domain, base URL, SMTP
 docker compose up -d --build    # or drop --build once images are on ghcr.io

@@ -7,7 +7,7 @@ Thanks for helping build Gopherdex. This guide covers everything from a first ty
 - **Small fixes** (typos, docs, an obvious bug with a test): open a pull request directly.
 - **Anything bigger** (a feature, a new dependency, a change to the database schema, the API or how publishing works): open an issue first and describe what you want to do. We'll agree on the approach before you spend time on code.
 - **Security problems:** never in a public issue or pull request. See [SECURITY.md](SECURITY.md).
-- New here? Issues labelled [`good first issue`](https://github.com/parthiban-sivakumar/gopherdex/labels/good%20first%20issue) are small, self-contained and have a pointer to where to start. Comment on one to say you're taking it.
+- New here? Issues labelled [`good first issue`](https://github.com/codebled/gopherdex/labels/good%20first%20issue) are small, self-contained and have a pointer to where to start. Comment on one to say you're taking it.
 
 Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 

@@ -33,10 +33,10 @@ import (
 	"golang.org/x/mod/sumdb/dirhash"
 	modzip "golang.org/x/mod/zip"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/blob"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/scan"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/blob"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/scan"
 )
 
 // DefaultMaxZipSize caps uploads. The go command accepts up to 500 MiB, but

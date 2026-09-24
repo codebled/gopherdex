@@ -26,7 +26,7 @@ import (
 	xmodule "golang.org/x/mod/module"
 )
 
-const userAgent = "gopherdex-bench (+https://github.com/parthiban-sivakumar/gopherdex)"
+const userAgent = "gopherdex-bench (+https://github.com/codebled/gopherdex)"
 
 // Upstream reads the public module index and mirror, caching every
 // response under Cache.

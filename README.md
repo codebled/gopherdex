@@ -28,7 +28,7 @@ Two programs:
 
 ```bash
 go run ./cmd/gopherdexd
-go install github.com/parthiban-sivakumar/gopherdex/cmd/gopherdex@latest   # the author CLI
+go install github.com/codebled/gopherdex/cmd/gopherdex@latest   # the author CLI
 ```
 
 Open http://localhost:8080 and choose **Register**. Without `-smtp-addr`, emails aren't sent. The verification link is printed in the server log instead.
@@ -66,7 +66,7 @@ Every flag can also come from the environment as `GOPHERDEX_<FLAG>` (`-base-url`
 ## Publish a module
 
 ```bash
-go install github.com/parthiban-sivakumar/gopherdex/cmd/gopherdex@latest   # or: make build
+go install github.com/codebled/gopherdex/cmd/gopherdex@latest   # or: make build
 
 # go.mod
 module gopherdex.localhost/alice/retry          # <module-host>/<your-username>/<name>
@@ -250,7 +250,7 @@ docker compose up -d --build
 ./smoke-test.sh https://gopherdex.example.com gopherdex.example.com/you/module@v0.1.0
 ```
 
-Releases: pushing a `v*` tag runs `.github/workflows/release.yml`. It attaches `make dist` binaries (Linux, macOS and Windows; `SHA256SUMS`) to a GitHub release and pushes the image to `ghcr.io/parthiban-sivakumar/gopherdex`. `make docker` builds the image locally.
+Releases: pushing a `v*` tag runs `.github/workflows/release.yml`. It attaches `make dist` binaries (Linux, macOS and Windows; `SHA256SUMS`) to a GitHub release and pushes the image to `ghcr.io/codebled/gopherdex`. `make docker` builds the image locally.
 
 ## Project pages
 

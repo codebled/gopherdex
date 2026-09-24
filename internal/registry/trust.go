@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 // ErrQuarantined reports a module hidden while administrators review it. It

@@ -9,7 +9,7 @@ package main
 import (
 	"os"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/cli"
+	"github.com/codebled/gopherdex/internal/cli"
 )
 
 func main() {

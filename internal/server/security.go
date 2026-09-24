@@ -14,10 +14,10 @@ import (
 
 	"rsc.io/qr"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 const challengeCookie = "gopherdex_2fa"

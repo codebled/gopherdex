@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/oidc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/oidc/oidctest"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/oidc"
+	"github.com/codebled/gopherdex/internal/oidc/oidctest"
 )
 
 func postJSON(t *testing.T, env *testEnv, path, token string, body any) (int, string) {

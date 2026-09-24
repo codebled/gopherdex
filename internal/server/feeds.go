@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 // Atom feeds, like PyPI's RSS feeds, for following new releases in a feed

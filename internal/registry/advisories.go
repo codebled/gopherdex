@@ -15,9 +15,9 @@ import (
 	xmodule "golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/vulndb"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/vulndb"
 )
 
 // AdvisoryPrefix starts the IDs of advisories published here, e.g.

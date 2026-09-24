@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/oidc"
-	"github.com/parthiban-sivakumar/gopherdex/internal/oidc/oidctest"
+	"github.com/codebled/gopherdex/internal/oidc"
+	"github.com/codebled/gopherdex/internal/oidc/oidctest"
 )
 
 func TestVerify(t *testing.T) {

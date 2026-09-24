@@ -41,7 +41,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/bench"
+	"github.com/codebled/gopherdex/internal/bench"
 )
 
 type profile struct {

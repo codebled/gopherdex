@@ -4,14 +4,14 @@ package version
 import "runtime/debug"
 
 // Module is Gopherdex's module path; the CLI installs from Module + "/cmd/gopherdex".
-const Module = "github.com/parthiban-sivakumar/gopherdex"
+const Module = "github.com/codebled/gopherdex"
 
 // CLIInstall is the command that installs the gopherdex CLI.
 const CLIInstall = "go install " + Module + "/cmd/gopherdex@latest"
 
 // Version is set for release builds:
 //
-//	go build -ldflags "-X github.com/parthiban-sivakumar/gopherdex/internal/version.Version=v1.2.3"
+//	go build -ldflags "-X github.com/codebled/gopherdex/internal/version.Version=v1.2.3"
 //
 // When it's empty, String falls back to what the go command recorded.
 var Version = ""

@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"slices"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 // Source is a set of hosted modules: the database-backed Registry, or the

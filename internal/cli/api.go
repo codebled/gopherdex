@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/version"
+	"github.com/codebled/gopherdex/internal/version"
 )
 
 type whoamiResponse struct {

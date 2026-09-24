@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 // Notifier warms the mirror and checksum database in the background.

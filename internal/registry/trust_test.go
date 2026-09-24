@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 func TestTokenScopeAndRequire2FA(t *testing.T) {

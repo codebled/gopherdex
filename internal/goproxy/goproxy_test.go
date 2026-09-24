@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
-	"github.com/parthiban-sivakumar/gopherdex/internal/store"
+	"github.com/codebled/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/store"
 )
 
 func newTestServer(t *testing.T) *httptest.Server {

@@ -14,15 +14,15 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/blob"
-	"github.com/parthiban-sivakumar/gopherdex/internal/database"
-	"github.com/parthiban-sivakumar/gopherdex/internal/discovery"
-	"github.com/parthiban-sivakumar/gopherdex/internal/goproxy"
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
-	"github.com/parthiban-sivakumar/gopherdex/internal/store"
-	"github.com/parthiban-sivakumar/gopherdex/web"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/blob"
+	"github.com/codebled/gopherdex/internal/database"
+	"github.com/codebled/gopherdex/internal/discovery"
+	"github.com/codebled/gopherdex/internal/goproxy"
+	"github.com/codebled/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/store"
+	"github.com/codebled/gopherdex/web"
 )
 
 // newTestServer serves the sample modules in data/modules, offline, with a

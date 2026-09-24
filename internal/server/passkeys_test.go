@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/webauthntest"
+	"github.com/codebled/gopherdex/internal/webauthntest"
 )
 
 // postJSONAs posts JSON with the browser's cookies, as the page script does.

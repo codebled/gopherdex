@@ -24,8 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/gomod"
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/gomod"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 const maxGoModSize = 16 << 20 // limit enforced by the go command

@@ -26,11 +26,11 @@ import (
 	xmodule "golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
-	"github.com/parthiban-sivakumar/gopherdex/internal/blob"
-	"github.com/parthiban-sivakumar/gopherdex/internal/database"
-	"github.com/parthiban-sivakumar/gopherdex/internal/mail"
-	"github.com/parthiban-sivakumar/gopherdex/internal/registry"
+	"github.com/codebled/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/blob"
+	"github.com/codebled/gopherdex/internal/database"
+	"github.com/codebled/gopherdex/internal/mail"
+	"github.com/codebled/gopherdex/internal/registry"
 )
 
 // SeedConfig describes a dataset to build.

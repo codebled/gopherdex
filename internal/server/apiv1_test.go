@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/accounts"
 )
 
 func getJSON(t *testing.T, env *testEnv, path string, dst any) *http.Response {

@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/module"
+	"github.com/codebled/gopherdex/internal/module"
 )
 
 // File is a parsed go.mod.

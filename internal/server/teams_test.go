@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/parthiban-sivakumar/gopherdex/internal/accounts"
+	"github.com/codebled/gopherdex/internal/accounts"
 )
 
 func TestTeamsOverHTTP(t *testing.T) {

@@ -1,4 +1,4 @@
-module github.com/parthiban-sivakumar/gopherdex
+module github.com/codebled/gopherdex
 
 go 1.26.0
 

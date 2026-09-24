@@ -153,4 +153,7 @@ func main() {
 	// Link previews (Slack, X, iMessage…): the box on the site's muted
 	// surface; the page title supplies the words.
 	write("og-image.png", encode(render(1200, 630, 450, 165, 300, &slate50, 1.6)))
+	// GitHub's repository social preview, at the size it asks for. Upload
+	// it under Settings → General → Social preview.
+	write("social-preview.png", encode(render(1280, 640, 480, 160, 320, &slate50, 1.6)))
 }
